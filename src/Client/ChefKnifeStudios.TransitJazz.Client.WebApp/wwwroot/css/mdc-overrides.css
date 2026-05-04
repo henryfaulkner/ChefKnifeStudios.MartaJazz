@@ -1,0 +1,9 @@
+/* MatBlazor/MDC component style overrides */
+
+.mdc-button {
+  border-radius: 4px;
+}
+
+.mdc-card {
+  border-radius: 8px;
+}
