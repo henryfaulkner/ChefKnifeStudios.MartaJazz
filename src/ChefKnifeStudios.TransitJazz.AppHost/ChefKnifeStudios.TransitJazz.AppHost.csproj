@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.0.0" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Client\ChefKnifeStudios.TransitJazz.Client.WebApp\ChefKnifeStudios.TransitJazz.Client.WebApp.csproj" />
+    <ProjectReference Include="..\Server\ChefKnifeStudios.TransitJazz.Server.WebAPI\ChefKnifeStudios.TransitJazz.Server.WebAPI.csproj" />
+  </ItemGroup>
+</Project>

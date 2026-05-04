@@ -1,0 +1,10 @@
+:root {
+  --primary-color: #2386CE;
+  --on-primary: #FFFFFF;
+  --background: #FAFCFE;
+  --on-background: #1A1C1E;
+  --surface: #FAFCFE;
+  --on-surface: #1A1C1E;
+  --surface-variant: #DDE3EB;
+  --on-surface-variant: #41484D;
+}
