@@ -117,7 +117,8 @@ app.MapHub<WorkerTransitHub>("/hubs/worker-transit")
     .AllowAnonymous();
     //.RequireAuthorization("TransitDataPublisher");
 
-app.MapTestEndpoints();
+app.MapTestEndpoints()
+    .MapMapsEndpoints();
 
 app.MapDefaultEndpoints();
 
