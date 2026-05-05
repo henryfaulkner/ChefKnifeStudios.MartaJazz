@@ -58,6 +58,7 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 
+.claude
 .opencode
 .specify
 specs
