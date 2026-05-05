@@ -1,19 +1,24 @@
+using Blazored.LocalStorage;
 using ChefKnifeStudios.TransitJazz.Client.Core;
 using ChefKnifeStudios.TransitJazz.Client.Core.Services;
 using ChefKnifeStudios.TransitJazz.Client.Shared.EventArgs;
+using ChefKnifeStudios.TransitJazz.Client.WebApp;
+using ChefKnifeStudios.TransitJazz.Shared;
+using ChefKnifeStudios.TransitJazz.Shared.Enums;
 using MatBlazor;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using System.Linq;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using System.Net.Http;
-using System.Collections.Generic;
-using ChefKnifeStudios.TransitJazz.Shared.Enums;
-using ChefKnifeStudios.TransitJazz.Shared;
-using Blazored.LocalStorage;
+using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
+builder.RootComponents.Add<App>("#app");
+builder.RootComponents.Add<HeadOutlet>("head::after");
 
 var appSettings = builder.Configuration.GetSection("AppSettings").Get<AppSettings>();
 if (appSettings?.ExternalApis != null)
@@ -37,6 +42,7 @@ var featureFlags = appSettings?.FeatureFlags ?? new Dictionary<FeatureFlags, boo
 builder.Services.AddSingleton<IFeatureFlagService>(_ => new FeatureFlagService(featureFlags));
 
 builder.Services.AddSingleton<IEventNotificationService, EventNotificationService>();
+builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationService>();
 
 builder.Services.AddMatBlazor();
 
@@ -50,5 +56,7 @@ builder.Services.AddMatToaster(new MatToastConfiguration
 });
 
 builder.Services.AddBlazoredLocalStorage();
+
+builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
 await builder.Build().RunAsync();
