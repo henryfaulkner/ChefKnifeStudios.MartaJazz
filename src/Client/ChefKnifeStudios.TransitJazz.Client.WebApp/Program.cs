@@ -1,5 +1,5 @@
-using ChefKnifeStudios.TransitJazz.Client.Core.Services;
 using ChefKnifeStudios.TransitJazz.Client.Core;
+using ChefKnifeStudios.TransitJazz.Client.Core.Services;
 using ChefKnifeStudios.TransitJazz.Client.Shared.EventArgs;
 using MatBlazor;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
@@ -37,7 +37,6 @@ var featureFlags = appSettings?.FeatureFlags ?? new Dictionary<FeatureFlags, boo
 builder.Services.AddSingleton<IFeatureFlagService>(_ => new FeatureFlagService(featureFlags));
 
 builder.Services.AddSingleton<IEventNotificationService, EventNotificationService>();
-builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationService>();
 
 builder.Services.AddMatBlazor();
 

@@ -1,17 +1,19 @@
-using ChefKnifeStudios.TransitJazz.Server.WebAPI.SignalR;
 using ChefKnifeStudios.TransitJazz.Server.Core.Interfaces;
 using ChefKnifeStudios.TransitJazz.Server.Infrastructure;
 using ChefKnifeStudios.TransitJazz.Server.BL.Services;
 using ChefKnifeStudios.TransitJazz.Shared;
+using ChefKnifeStudios.TransitJazz.Shared.Events;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Identity.Web;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
 using System;
 using ChefKnifeStudios.TransitJazz.Server.WebAPI.EndpointGroups;
+using ChefKnifeStudios.TransitJazz.Server.WebAPI.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +33,26 @@ builder.Services.AddCors(options =>
     });
 });
 
+//builder.Services
+//    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+//    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
+
+//builder.Services.AddAuthorization(options =>
+//{
+//    options.AddPolicy("TransitDataPublisher", policy =>
+//    {
+//        policy.RequireAuthenticatedUser();
+//        policy.RequireClaim("roles", "TransitData.Publish");
+//    });
+//});
+
+builder.Services.AddSignalR(options =>
+    {
+        options.EnableDetailedErrors = true;
+        options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+    })
+    .AddJsonProtocol(options => JsonSettings.ApplyTo(options.PayloadSerializerOptions));
+
 builder.Services.ConfigureHttpJsonOptions(static options =>
 {
     var src = JsonOptions.Get();
@@ -49,11 +71,6 @@ builder.Services.ConfigureHttpJsonOptions(static options =>
     dest.WriteIndented = src.WriteIndented;
 });
 
-builder.Services.AddSignalR();
-
-builder.Services.AddSingleton<IUserIdProvider, PlayerIdProvider>();
-builder.Services.AddSingleton<ITransitJazzNotificationHelper, TransitJazzNotificationHelper>();
-builder.Services.AddSingleton<IPlayerConnectionTracker, PlayerConnectionTracker>();
 builder.Services.AddSingleton(typeof(IKeyValueRepository<>), typeof(InMemoryKeyValueRepository<>));
 builder.Services.AddSingleton<IFeatureFlagService>(sp =>
 {
@@ -77,6 +94,9 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+//app.UseAuthentication();
+//app.UseAuthorization();
+
 app.MapOpenApi().AllowAnonymous();
 
 app.MapScalarApiReference(options =>
@@ -91,7 +111,10 @@ app.MapScalarApiReference(options =>
 
 app.UseCors("Default");
 
-app.MapHub<SignalRNotificationHub>("/cks-notification");
+app.MapHub<TransitHub>("/hubs/transit").AllowAnonymous();
+app.MapHub<WorkerTransitHub>("/hubs/worker-transit")
+    .AllowAnonymous();
+    //.RequireAuthorization("TransitDataPublisher");
 
 app.MapTestEndpoints();
 

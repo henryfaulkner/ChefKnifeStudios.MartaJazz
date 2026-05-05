@@ -9,6 +9,10 @@
       {
         "Path": "Server\\ChefKnifeStudios.TransitJazz.Server.WebAPI\\ChefKnifeStudios.TransitJazz.Server.WebAPI.csproj",
         "Action": "Start"
+      },
+      {
+        "Path": "Server\\ChefKnifeStudios.TransitJazz.Server.TransitDataWorker\\ChefKnifeStudios.TransitJazz.Server.TransitDataWorker.csproj",
+        "Action": "Start"
       }
     ]
   }
