@@ -1,8 +1,6 @@
 ﻿using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace ChefKnifeStudios.TransitJazz.Client.Shared.Components;
@@ -70,18 +68,6 @@ public partial class Map : ComponentBase
         }
     }
 
-    public async Task CenterJobsitePinAsync(int jobsiteId)
-    {
-        try
-        {
-            await JsRuntime.InvokeVoidAsync("OvercastMap.centerJobsitePin", ElementId, jobsiteId);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex.ToString());
-        }
-    }
-
     public async Task SetMapStyleAsync(MapStyles style)
     {
         try
@@ -107,19 +93,16 @@ public partial class Map : ComponentBase
         _ => string.Empty,
     };
 
-    public async Task PlotJobSitesAsync(object? mapFeatureCollection, bool centerMap = true)
+    public async Task UpsertBusMarkerAsync(string vehicleId, float latitude, float longitude)
     {
-        if (mapFeatureCollection != null)
+        try
         {
-            try
-            {
-                await JsRuntime.InvokeVoidAsync("OvercastMap.plotFeatures",
-                    ElementId, "jobs", mapFeatureCollection, centerMap);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
+            await JsRuntime.InvokeVoidAsync("OvercastMap.upsertBusMarker",
+                ElementId, vehicleId, latitude, longitude);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.ToString());
         }
     }
 }

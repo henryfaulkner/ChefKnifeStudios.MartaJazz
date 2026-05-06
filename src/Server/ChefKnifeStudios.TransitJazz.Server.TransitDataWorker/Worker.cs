@@ -16,7 +16,7 @@ public class Worker(
     {
         logger.LogInformation("TransitDataWorker started.");
 
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
         await transitHubPublisher.StartAsync(stoppingToken);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
