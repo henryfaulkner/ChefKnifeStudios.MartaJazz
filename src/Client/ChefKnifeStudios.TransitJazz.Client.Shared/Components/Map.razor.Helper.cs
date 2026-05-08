@@ -1,8 +1,6 @@
 ﻿using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace ChefKnifeStudios.TransitJazz.Client.Shared.Components;
@@ -22,7 +20,7 @@ public partial class Map : ComponentBase
     {
         try
         {
-            await JsRuntime.InvokeVoidAsync("OvercastMap.createMap",
+            await JsRuntime.InvokeVoidAsync("ChefMap.createMap",
                 ElementId, DotNetObjectReference.Create(this));
         }
         catch (Exception ex)
@@ -36,7 +34,7 @@ public partial class Map : ComponentBase
         try
         {
             CameraOptions.ChangeZoom(zoomIn);
-            await JsRuntime.InvokeVoidAsync("OvercastMap.setMapZoom", ElementId, CameraOptions.Zoom);
+            await JsRuntime.InvokeVoidAsync("ChefMap.setMapZoom", ElementId, CameraOptions.Zoom);
         }
         catch (Exception ex)
         {
@@ -49,7 +47,7 @@ public partial class Map : ComponentBase
         try
         {
             CameraOptions.Zoom = zoom;
-            await JsRuntime.InvokeVoidAsync("OvercastMap.setMapZoom", ElementId, zoom);
+            await JsRuntime.InvokeVoidAsync("ChefMap.setMapZoom", ElementId, zoom);
         }
         catch (Exception ex)
         {
@@ -62,7 +60,7 @@ public partial class Map : ComponentBase
         try
         {
             _showTraffic = !_showTraffic;
-            await JsRuntime.InvokeVoidAsync("OvercastMap.toggleTraffic", ElementId, _showTraffic);
+            await JsRuntime.InvokeVoidAsync("ChefMap.toggleTraffic", ElementId, _showTraffic);
         }
         catch (Exception ex)
         {
@@ -70,11 +68,11 @@ public partial class Map : ComponentBase
         }
     }
 
-    public async Task CenterJobsitePinAsync(int jobsiteId)
+    public async Task CenterVehiclePinAsync(int vehicleId)
     {
         try
         {
-            await JsRuntime.InvokeVoidAsync("OvercastMap.centerJobsitePin", ElementId, jobsiteId);
+            await JsRuntime.InvokeVoidAsync("ChefMap.centerVehiclePin", ElementId, vehicleId);
         }
         catch (Exception ex)
         {
@@ -89,7 +87,7 @@ public partial class Map : ComponentBase
             var azureMapStyle = GetAzureMapStyle(style);
 
             if (azureMapStyle == string.Empty) return;
-            await JsRuntime.InvokeVoidAsync("OvercastMap.setMapStyle", ElementId, azureMapStyle);
+            await JsRuntime.InvokeVoidAsync("ChefMap.setMapStyle", ElementId, azureMapStyle);
         }
         catch (Exception ex)
         {
@@ -107,19 +105,43 @@ public partial class Map : ComponentBase
         _ => string.Empty,
     };
 
-    public async Task PlotJobSitesAsync(object? mapFeatureCollection, bool centerMap = true)
+    public async Task PlotVehiclesAsync(object? mapFeatureCollection, bool centerMap = true)
     {
         if (mapFeatureCollection != null)
         {
             try
             {
-                await JsRuntime.InvokeVoidAsync("OvercastMap.plotFeatures",
-                    ElementId, "jobs", mapFeatureCollection, centerMap);
+                await JsRuntime.InvokeVoidAsync("ChefMap.plotFeatures",
+                    ElementId, "vehicles", mapFeatureCollection, centerMap);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.ToString());
             }
+        }
+    }
+
+    public async Task ShowRouteShapeAsync(string geoJson)
+    {
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("ChefMap.showRouteShape", ElementId, geoJson);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.ToString());
+        }
+    }
+
+    public async Task ClearRouteShapeAsync()
+    {
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("ChefMap.clearRouteShape", ElementId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.ToString());
         }
     }
 }

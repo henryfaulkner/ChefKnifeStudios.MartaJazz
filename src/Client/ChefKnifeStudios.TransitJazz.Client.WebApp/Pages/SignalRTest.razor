@@ -1,6 +1,6 @@
-﻿@using ChefKnifeStudios.TransitJazz.Client.Core.Services
+﻿@using System.Text.Json
+@using ChefKnifeStudios.TransitJazz.Client.Core.Services
 @using ChefKnifeStudios.TransitJazz.Shared
-@using ChefKnifeStudios.TransitJazz.Client.Shared
 @using Microsoft.Extensions.Logging
 
 @page "/signalr"
@@ -43,7 +43,22 @@
                 {
                     Logger.LogInformation("Received batch of {count} events from SignalRNotificationService", batch.Count);
                     foreach (var notification in batch)
+                    {
                         messages.Add($"{notification.EventType}: {notification.Payload}");
+                        
+                        var flattened = JsonFlattener.Flatten(notification.Payload);
+
+                        // Debug: Check if the dictionary actually has items
+                        Console.WriteLine($"Flattened Count: {flattened.Count}");
+
+                        foreach (var kvp in flattened)
+                        {
+                            Console.WriteLine($"{kvp.Key}: {kvp.Value}");
+                        }
+
+                        // Final output
+                        Console.WriteLine(JsonSerializer.Serialize(flattened, new JsonSerializerOptions { WriteIndented = true }));
+                    }
                     StateHasChanged();
                 });
             };

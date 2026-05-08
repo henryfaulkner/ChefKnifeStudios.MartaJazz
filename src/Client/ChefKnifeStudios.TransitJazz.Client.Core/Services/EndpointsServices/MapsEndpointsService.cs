@@ -10,7 +10,7 @@ public interface IMapsEndpointsService
     Task<Result<Discard>> GetMapsAuthToken(CancellationToken cancellationToken = default);
 }
 
-public class MapsEndpointsService
+public class MapsEndpointsService : IMapsEndpointsService
 {
     readonly ILogger<MapsEndpointsService> _logger;
     readonly IHttpService _httpService;

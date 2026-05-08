@@ -5,15 +5,14 @@ namespace ChefKnifeStudios.TransitJazz.Shared;
 
 public static class JsonFlattener
 {
-    public static Dictionary<string, object?> Flatten<T>(T? value)
+    public static Dictionary<string, object?> Flatten(object? value)
     {
         var result = new Dictionary<string, object?>();
-        if (value is null)
-            return result;
+        if (value is null) return result;
 
-        var json = JsonSerializer.SerializeToUtf8Bytes(value, JsonSettings.DefaultOptions);
-        using var doc = JsonDocument.Parse(json);
-        FlattenElement(result, string.Empty, doc.RootElement);
+        // Use a JsonElement directly to avoid double-serialization overhead
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(value));
+        FlattenElement(result, "", doc.RootElement);
         return result;
     }
 
@@ -24,29 +23,18 @@ public static class JsonFlattener
             case JsonValueKind.Object:
                 foreach (var prop in element.EnumerateObject())
                 {
-                    if (prop.Value.ValueKind == JsonValueKind.Null)
-                        continue;
-                    FlattenElement(result, string.IsNullOrEmpty(prefix) ? prop.Name : $"{prefix}.{prop.Name}", prop.Value);
+                    string name = string.IsNullOrEmpty(prefix) ? prop.Name : $"{prefix}.{prop.Name}";
+                    FlattenElement(result, name, prop.Value);
                 }
                 break;
-
             case JsonValueKind.Array:
-                var arr = new List<object?>();
+                int index = 0;
                 foreach (var item in element.EnumerateArray())
                 {
-                    if (item.ValueKind == JsonValueKind.Null)
-                        arr.Add(null);
-                    else if (item.ValueKind == JsonValueKind.Object || item.ValueKind == JsonValueKind.Array)
-                        arr.Add(Flatten<object?>(JsonSerializer.Deserialize<object?>(item.GetRawText(), JsonSettings.DefaultOptions)));
-                    else
-                        arr.Add(JsonElementToObject(item));
+                    FlattenElement(result, $"{prefix}[{index}]", item);
+                    index++;
                 }
-                result[prefix] = arr.ToArray();
                 break;
-
-            case JsonValueKind.Null:
-                break;
-
             default:
                 result[prefix] = JsonElementToObject(element);
                 break;

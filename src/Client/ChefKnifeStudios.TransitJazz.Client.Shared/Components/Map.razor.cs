@@ -21,6 +21,7 @@ public partial class Map : ComponentBase
         = new() { Center = new Position(0, 0), Zoom = 1 };
     [Parameter] public EventCallback<Map> OnMapReady { get; set; }
     [Parameter] public EventCallback<Map> OnMapBodyClicked { get; set; }
+    [Parameter] public EventCallback<(Map Map, string VehicleId)> OnBusMarkerClicked { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -40,6 +41,12 @@ public partial class Map : ComponentBase
     public async Task MapBodyClickedAsync()
     {
         await OnMapBodyClicked.InvokeAsync(this);
+    }
+
+    [JSInvokable("BusMarkerClickedAsync")]
+    public async Task BusMarkerClickedAsync(string vehicleId)
+    {
+        await OnBusMarkerClicked.InvokeAsync((this, vehicleId));
     }
 
     [JSInvokable("getMapSettings")]
