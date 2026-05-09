@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Headers;
+using ChefKnifeStudios.TransitJazz.Shared.EventData;
 using ChefKnifeStudios.TransitJazz.Shared.Events;
 
 namespace ChefKnifeStudios.TransitJazz.Server.TransitDataWorker;
@@ -9,7 +10,7 @@ public class Worker(
     ILogger<Worker> logger,
     ITransitHubPublisher transitHubPublisher) : BackgroundService
 {
-    readonly ConcurrentDictionary<string, (double Lat, double Lon)> _positionCache = new();
+    readonly ConcurrentDictionary<string, (VehicleData, PositionData, TripData?)> _lastUpdateCache = new();
     readonly string _gtfsRtUrl = "https://gtfs-rt.itsmarta.com/TMGTFSRealTimeWebService/vehicle/vehiclepositions.pb";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -36,35 +37,45 @@ public class Worker(
 
             foreach (var entity in feed.Entities)
             {
-                if (entity.Vehicle?.Position == null) continue;
+                if (entity.Vehicle == null) continue;
 
-                var vehicle = entity.Vehicle;
-                var vehicleId = vehicle.Vehicle?.Id ?? entity.Id;
-                var lat = vehicle.Position.Latitude;
-                var lon = vehicle.Position.Longitude;
+                var lastUpdateRecord = _lastUpdateCache.GetValueOrDefault(entity.Id);
+                var records = new List<VehiclePositionBatchEvent.VehiclePositionRecord>();
 
-                var isNewOrMoved = !_positionCache.TryGetValue(vehicleId, out var prev)
-                    || prev.Lat != lat || prev.Lon != lon;
+                if (entity.Vehicle.Position == null)
+                {
+                    if (lastUpdateRecord == default) continue; // No position data and no cache — skip
 
-                if (!isNewOrMoved) continue;
+                    // No fresh position — publish cached position as stale so client can count stale cycles
+                    var (cachedVehicle, cachedPosition, cachedTrip) = lastUpdateRecord;
+                    records.Add(new VehiclePositionBatchEvent.VehiclePositionRecord(cachedVehicle, cachedPosition, cachedTrip, IsStale: true));
+                }
+                else
+                {
+                    // Add prior available data
+                    if (lastUpdateRecord != default)
+                    {
+                        var (priorVehicle, priorPosition, priorTrip) = lastUpdateRecord;
+                        records.Add(new VehiclePositionBatchEvent.VehiclePositionRecord(priorVehicle, priorPosition, priorTrip, IsStale: false));
+                    }
 
-                _positionCache[vehicleId] = (lat, lon);
+                    // Add current available data
+                    var vehicle = entity.Vehicle;
+                    var vehicleData = EventMapper.ToVehicleData(vehicle.Vehicle!, vehicle);
+                    var positionData = EventMapper.ToPositionData(vehicle.Position, vehicle);
+                    var tripData = EventMapper.ToTripData(vehicle.Trip);
 
-                var evt = new VehiclePositionUpdatedEvent(
-                    EventMapper.ToVehicleData(vehicle.Vehicle!, vehicle),
-                    EventMapper.ToPositionData(vehicle.Position, vehicle),
-                    EventMapper.ToTripData(vehicle.Trip)
-                );
+                    records.Add(new VehiclePositionBatchEvent.VehiclePositionRecord(vehicleData, positionData, tripData, IsStale: false));
+
+                    var didUpdate = _lastUpdateCache.TryAdd(entity.Id, (vehicleData, positionData, tripData));
+                    if (!didUpdate) logger.LogWarning("Failed to update cache for vehicle {VehicleId}.", entity.Id);
+                }
 
                 batch.Add(new EventEnvelope(
-                    nameof(VehiclePositionUpdatedEvent),
+                    nameof(VehiclePositionBatchEvent),
                     DateTimeOffset.UtcNow,
-                    evt
+                    new VehiclePositionBatchEvent(records)
                 ));
-
-                logger.LogInformation(
-                    "Vehicle {VehicleId} updated: Lat {Lat}, Lon {Lon}, Speed {Speed}, Bearing {Bearing}",
-                    vehicleId, lat, lon, vehicle.Position.Speed, vehicle.Position.Bearing);
             }
 
             logger.LogInformation("Processed GTFS-RT feed: {UpdatedCount} vehicles updated.", batch.Count);

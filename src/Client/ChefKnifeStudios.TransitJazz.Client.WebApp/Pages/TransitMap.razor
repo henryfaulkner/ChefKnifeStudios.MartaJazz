@@ -1,0 +1,13 @@
+@page "/transit-map"
+@using ChefKnifeStudios.TransitJazz.Client.Shared.Components
+
+<div class="transit-map-container">
+    <div class="connection-status connection-status--@_connectionCssClass">
+        @_connectionLabel
+    </div>
+    <Map CameraOptions="DefaultCameraOptions"
+        OnMapReady="OnMapReadyAsync"
+        OnMapBodyClicked="OnMapBodyClickedAsync"
+        OnBusMarkerClicked="OnVehicleMarkerClickedAsync"
+    />
+</div>

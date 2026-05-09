@@ -1,6 +1,7 @@
 using Blazored.LocalStorage;
 using ChefKnifeStudios.TransitJazz.Client.Core;
 using ChefKnifeStudios.TransitJazz.Client.Core.Services;
+using ChefKnifeStudios.TransitJazz.Client.Core.Services.EndpointsServices;
 using ChefKnifeStudios.TransitJazz.Client.Shared.EventArgs;
 using ChefKnifeStudios.TransitJazz.Client.WebApp;
 using ChefKnifeStudios.TransitJazz.Shared;
@@ -43,6 +44,9 @@ builder.Services.AddSingleton<IFeatureFlagService>(_ => new FeatureFlagService(f
 
 builder.Services.AddSingleton<IEventNotificationService, EventNotificationService>();
 builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationService>();
+
+builder.Services.AddTransient<IGtfsEndpointsService, GtfsEndpointsService>();
+builder.Services.AddTransient<IMapsEndpointsService, MapsEndpointsService>();
 
 builder.Services.AddMatBlazor();
 

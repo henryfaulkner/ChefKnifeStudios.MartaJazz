@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
 using System;
 using ChefKnifeStudios.TransitJazz.Server.WebAPI.EndpointGroups;
+using ChefKnifeStudios.TransitJazz.Server.WebAPI.GtfsStatic;
 using ChefKnifeStudios.TransitJazz.Server.WebAPI.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -73,6 +74,8 @@ builder.Services.ConfigureHttpJsonOptions(static options =>
 });
 
 builder.Services.AddSingleton(typeof(IKeyValueRepository<>), typeof(InMemoryKeyValueRepository<>));
+builder.Services.AddHttpClient();
+builder.Services.AddHostedService<GtfsStaticLoader>();
 builder.Services.AddSingleton<IFeatureFlagService>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -118,7 +121,8 @@ app.MapHub<WorkerTransitHub>("/hubs/worker-transit")
     //.RequireAuthorization("TransitDataPublisher");
 
 app.MapTestEndpoints()
-    .MapMapsEndpoints();
+    .MapMapsEndpoints()
+    .MapGtfsEndpoints();
 
 app.MapDefaultEndpoints();
 

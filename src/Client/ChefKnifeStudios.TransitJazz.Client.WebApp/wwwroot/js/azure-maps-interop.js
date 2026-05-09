@@ -1,9 +1,8 @@
-﻿let mapPinImagesBaseUrl = "/images/map-pins";
+﻿let mapPinImagesBaseUrl = "images/map-pins";
 
-window.OvercastMap = {
-    markers: {},
+window.ChefMap = {
     popups: [],
-    jobSitePopup: null,
+    vehiclePopup: null,
     maps: {},
 
     createMap: async function (containerDivId, mapComponent) {
@@ -39,8 +38,7 @@ window.OvercastMap = {
 
         // wait until the map resources are ready
         map.events.add('ready', async function () {
-            // configure data sources and layers
-            await map.initDataSourceForJobsitePins(containerDivId);
+            await map.initDataSourceForVehiclePositions(containerDivId, mapComponent);
 
             let containerDiv = document.getElementById(containerDivId);
 
@@ -62,14 +60,14 @@ window.OvercastMap = {
             }
 
             if (!isPin) {
-                OvercastMap.popups.forEach(p => p.close());
+                ChefMap.popups.forEach(p => p.close());
                 mapComponent.invokeMethodAsync("mapBodyClickedAsync");
             }
         });
     },
 
     setMapZoom: function (containerDivId, zoom) {
-        let map = OvercastMap.maps[containerDivId];
+        let map = ChefMap.maps[containerDivId];
         if (map == null) return;
 
         if (zoom >= 1 && zoom <= 24) {
@@ -79,7 +77,7 @@ window.OvercastMap = {
 
     setMapStyle: function (containerDivId, mapStyle) {
         try {
-            let map = OvercastMap.maps[containerDivId];
+            let map = ChefMap.maps[containerDivId];
             if (map == null) return;
 
             map.setStyle({ style: mapStyle });
@@ -87,7 +85,7 @@ window.OvercastMap = {
     },
 
     toggleTraffic: function (containerDivId, showTraffic) {
-        let map = OvercastMap.maps[containerDivId];
+        let map = ChefMap.maps[containerDivId];
         if (map == null) return;
 
         map.setTraffic({
@@ -96,24 +94,25 @@ window.OvercastMap = {
         });
     },
 
-    centerJobsitePin: function (containerDivId, jobsiteId) {
-        let map = OvercastMap.maps[containerDivId];
+    centerVehiclePin: function (containerDivId, vehicleId) {
+        let map = ChefMap.maps[containerDivId];
         if (map == null) return;
 
-        let markerId = 'job_site_marker_' + jobsiteId;
-        let obj = OvercastMap.markers[markerId];
+        let ds = map.sources.getById('vehicles');
+        if (ds == null) return;
 
-        if (!obj || obj.marker == null || obj.shape == null) return;
-
-        map.setCamera({ center: obj.shape.getCoordinates() });
+        let shape = ds.getShapes().find(s =>
+            s.getType() === 'Point' && s.getProperties().vehicleId === vehicleId
+        );
+        if (shape) map.setCamera({ center: shape.getCoordinates() });
     },
 
     plotFeatures: function (containerDivId, featureType, featureCollection, centerMap) {
         let sourceId = ((r) => ({
-            "jobs": "job-sites"
+            "vehicles": "vehicles"
         })[r])(featureType);
 
-        let map = OvercastMap.maps[containerDivId];
+        let map = ChefMap.maps[containerDivId];
         if (map == null) return;
 
         let datasource = map.sources.getById(sourceId);
@@ -124,15 +123,13 @@ window.OvercastMap = {
 
             let features = featureCollection.features;
 
-            //if (featureType == "jobs") console.log(`plotFeatures - ${featureType}: ${features.length}`);
-
             if (features.length > 0) {
                 datasource.add(featureCollection);
 
                 if (centerMap === true) {
                     // center the map based on all features plotted
                     try {
-                        if (featureType !== "jobs") {
+                        if (featureType !== "vehicles") {
                             features = features.filter(f => f.geometry.type === "Point");
                         } else {
                             // use first few - map hangs when there are too many features
@@ -149,172 +146,93 @@ window.OvercastMap = {
         }
     },
 
-    toggleJobSiteMarkerActiveState: function (containerDivId, accountId, activate) {
-        let markerId = 'job_site_marker_' + accountId;
-        let obj = OvercastMap.markers[markerId];
+    showRouteShape: function (containerDivId, geoJsonString) {
+        let map = ChefMap.maps[containerDivId];
+        if (map == null) return;
 
-        if (!obj || obj.marker == null || obj.shape == null) return;
+        let ds = map.sources.getById('route-shapes');
+        if (ds == null) return;
 
-        let marker = obj.marker;
-        let shape = obj.shape;
+        ds.clear();
 
-        if (shape.getType() === 'Point') { // may not need this, as there is a filter on the related layer 
-            let p = shape.getProperties();
-            // let pinImage = activate ? p.pinIcon.replace('.png', '-active.png') : p.pinIcon;
-            let pinImage = activate ? "stop-pin-orange.png" : p.pinIcon;
-            let className = activate ? "active" : "";
-            let tooltip = activate ? p.waJobsiteName : "";
-
-            let attributes = [
-                `id="${markerId}"`,
-                `title="${tooltip}"`,
-                `class="job-site-pin ${className}"`,
-                `style="background-image: url('${mapPinImagesBaseUrl}/${pinImage}');"`
-            ].join(' ');
-
-            let markerContent = `<div ${attributes}><div>{text}<div></div>`;
-            marker.setOptions({ htmlContent: markerContent });
+        try {
+            let feature = JSON.parse(geoJsonString);
+            ds.add(feature);
+        } catch (err) {
+            console.warn('[ChefMap] showRouteShape: failed to parse GeoJSON', err);
         }
     },
 
-    toggleJobsiteCardPopup: function (containerDivId, accountId, activate, centerMap) {
-        let map = OvercastMap.maps[containerDivId];
+    clearRouteShape: function (containerDivId) {
+        let map = ChefMap.maps[containerDivId];
         if (map == null) return;
 
-        let markerId = 'job_site_marker_' + accountId;
-        let obj = OvercastMap.markers[markerId];
+        let ds = map.sources.getById('route-shapes');
+        if (ds == null) return;
 
-        if (!obj || obj.marker == null) return;
+        ds.clear();
+    },
 
-        let marker = obj.marker;
-
-        if (activate) {
-            if (OvercastMap.jobSitePopup == null) {
-                OvercastMap.jobSitePopup = new atlas.Popup({
-                    pixelOffset: [110, -20], // to be set based on required position of popup relative to the marker
-                    closeButton: false,
-                    showPointer: false
-                });
-
-                OvercastMap.popups.push(OvercastMap.jobSitePopup);
-            }
-
-            if (OvercastMap.jobSitePopup.isOpen()) OvercastMap.jobSitePopup.close();
-
-            let content = obj.infoContent;
-
-            OvercastMap.jobSitePopup.setOptions({
-                // update the content of the popup
-                content: content,
-
-                // update the popup's position with the symbol's coordinate
-                position: marker.getOptions().position
-            });
-
-            // open the popup
-            if (!OvercastMap.jobSitePopup.isOpen()) OvercastMap.jobSitePopup.open(map);
-
-            if (centerMap === true) {
-                map.setCamera({ center: marker.getOptions().position });
-            }
-        } else {
-            if (OvercastMap.jobSitePopup.isOpen()) OvercastMap.jobSitePopup.close();
+    _showBusTooltip: function (map, props, position) {
+        if (!ChefMap._vehiclePopup) {
+            ChefMap._vehiclePopup = new atlas.Popup({ closeButton: false });
         }
     }
 };
 
-atlas.Map.prototype.initDataSourceForJobsitePins = async function (containerDivId) {
-    let map = OvercastMap.maps[containerDivId];
+atlas.Map.prototype.initDataSourceForVehiclePositions = async function (containerDivId, mapComponent) {
+    let map = ChefMap.maps[containerDivId];
     if (map == null) return;
 
-    let sourceId = 'job-sites';
-    let dsJobSites = map.sources.getById(sourceId);
+    let sourceId = 'vehicles';
+    let dsVehicles = map.sources.getById(sourceId);
 
-    if (dsJobSites != null) return;
+    if (dsVehicles != null) return;
 
-    dsJobSites = new atlas.source.DataSource(sourceId);
-    map.sources.add(dsJobSites);
+    const pinImages = ['stop-pin-red', 'stop-pin-blue', 'stop-pin-green', 'stop-pin-orange'];
+    await Promise.all(pinImages.map(id =>
+        map.imageSprite.add(id, `${mapPinImagesBaseUrl}/${id}.png`)
+    ));
 
-    // layer for rendering job sites
-    let jobsiteSymbolLayer = new atlas.layer.SymbolLayer(dsJobSites, null, {
-        iconOptions: { image: '' },
-        filter: [  // only render Point in this layer
-            'any',
-            ['==', ['geometry-type'], 'Point']
-        ]
+    dsVehicles = new atlas.source.DataSource(sourceId);
+    map.sources.add(dsVehicles);
+
+    let vehicleSymbolLayer = new atlas.layer.SymbolLayer(dsVehicles, 'vehicle-positions-layer', {
+        iconOptions: {
+            image: ['coalesce', ['get', 'pinIcon'], 'stop-pin-red'],
+            size: 0.8,
+            anchor: 'center',
+            allowOverlap: true,
+            ignorePlacement: true
+        },
+        filter: ['==', ['geometry-type'], 'Point']
     });
 
-    map.layers.add(jobsiteSymbolLayer);
+    map.layers.add(vehicleSymbolLayer);
 
-    // show job site pin symbol as HTML marker
-    map.events.add('dataadded', dsJobSites, (e) => {
-        let shapes = dsJobSites.getShapes();
-        for (let i = 0; i < shapes.length; i++) {
-            let s = shapes[i];
-            if (s.getType() === 'Point') {
-                let p = s.getProperties();
-                let markerId = `job_site_marker_${p.waJobsiteId}`;
+    // Route shapes layer — rendered below vehicle markers
+    let routeDs = new atlas.source.DataSource('route-shapes');
+    map.sources.add(routeDs);
 
-                // skip if marker already exists
-                if (OvercastMap.markers[markerId]) continue;
-
-                let pinImage = p.pinIcon ?? 'stop-pin-red.png';
-
-                let attributes = [
-                    `id="${markerId}"`,
-                    `class="job-site-pin"`,
-                    `style="background-image: url('${mapPinImagesBaseUrl}/${pinImage}');"`
-                ].join(' ');
-
-                let marker = new atlas.HtmlMarker({
-                    htmlContent: `<div ${attributes}><div>{text}</div></div>`,
-                    position: s.getCoordinates(),
-                    anchor: 'center'
-                });
-
-                OvercastMap.markers[markerId] = {
-                    marker: marker,
-                    shape: s,
-                    infoContent: `<jobsite-card-component id="${p.waJobsiteId}"></jobsite-card-component>`
-                };
-
-                map.events.add('click', marker, async () => {
-                    OvercastMap.toggleJobsiteCardPopup(containerDivId, p.waJobsiteId, true);
-                });
-
-                map.events.add('mouseover', marker, async () => {
-                    OvercastMap.toggleJobSiteMarkerActiveState(containerDivId, p.waJobsiteId, true);
-                });
-
-                map.events.add('mouseout', marker, async () => {
-                    OvercastMap.toggleJobSiteMarkerActiveState(containerDivId, p.waJobsiteId, false);
-                });
-
-                map.markers.add(marker);
-            }
-        }
+    let routeLayer = new atlas.layer.LineLayer(routeDs, 'route-shapes-layer', {
+        strokeColor: ['coalesce', ['get', 'color'], '#0078D4'],
+        strokeWidth: 4,
+        strokeOpacity: 0.85,
+        lineJoin: 'round',
+        lineCap: 'round'
     });
 
-    // remove HTML marker for job site when related feature is removed
-    map.events.add('dataremoved', dsJobSites, (e) => {
-        for (let markerId in OvercastMap.markers) {
-            let obj = OvercastMap.markers[markerId];
-            if (obj && obj.marker) {
-                map.markers.remove(obj.marker);
-            }
-            OvercastMap.markers[markerId] = null;
-        }
-    });
+    map.layers.add(routeLayer);
 
     // change the hover cursor for pins to pointer
-    map.events.add('mouseover', [jobsiteSymbolLayer], () => {
+    map.events.add('mouseover', [vehicleSymbolLayer], () => {
         map.getCanvasContainer().style.cursor = 'pointer';
         document.querySelector('.atlas-map-canvas').style.cursor = 'pointer'
     });
 
     // change the cursor back to the default (grab)
-    map.events.add('mouseout', [jobsiteSymbolLayer], () => {
+    map.events.add('mouseout', [vehicleSymbolLayer], () => {
         map.getCanvasContainer().style.cursor = 'grab';
         document.querySelector('.atlas-map-canvas').style.cursor = 'grab'
     });
-}
+};
