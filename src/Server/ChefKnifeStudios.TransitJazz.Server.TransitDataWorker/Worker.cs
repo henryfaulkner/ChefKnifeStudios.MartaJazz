@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Headers;
+using ChefKnifeStudios.TransitJazz.Shared.EventData;
 using ChefKnifeStudios.TransitJazz.Shared.Events;
 
 namespace ChefKnifeStudios.TransitJazz.Server.TransitDataWorker;
@@ -9,7 +10,7 @@ public class Worker(
     ILogger<Worker> logger,
     ITransitHubPublisher transitHubPublisher) : BackgroundService
 {
-    readonly ConcurrentDictionary<string, (double Lat, double Lon)> _positionCache = new();
+    readonly ConcurrentDictionary<string, (VehicleData, PositionData, TripData?)> _lastUpdateCache = new();
     readonly string _gtfsRtUrl = "https://gtfs-rt.itsmarta.com/TMGTFSRealTimeWebService/vehicle/vehiclepositions.pb";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -36,35 +37,43 @@ public class Worker(
 
             foreach (var entity in feed.Entities)
             {
+                // TODO: This could cause an false offline bug. Need to consider more carefully.
                 if (entity.Vehicle?.Position == null) continue;
 
+                var eventData = new List<(VehicleData, PositionData, TripData?)>();
+
+                // Add prior available data
+                var lastUpdateRecord = _lastUpdateCache.GetValueOrDefault(entity.Id);
+                if (lastUpdateRecord != default)
+                {
+                    eventData.Add(lastUpdateRecord);
+                }
+
+                // Add current available data
                 var vehicle = entity.Vehicle;
-                var vehicleId = vehicle.Vehicle?.Id ?? entity.Id;
-                var lat = vehicle.Position.Latitude;
-                var lon = vehicle.Position.Longitude;
+                var vehicleData = EventMapper.ToVehicleData(vehicle.Vehicle!, vehicle);
+                var positionData = EventMapper.ToPositionData(vehicle.Position, vehicle);
+                var tripData = EventMapper.ToTripData(vehicle.Trip);
+                var eventDataTuple = (vehicleData, positionData, tripData);
+                eventData.Add(eventDataTuple);
 
-                var isNewOrMoved = !_positionCache.TryGetValue(vehicleId, out var prev)
-                    || prev.Lat != lat || prev.Lon != lon;
-
-                if (!isNewOrMoved) continue;
-
-                _positionCache[vehicleId] = (lat, lon);
-
-                var evt = new VehiclePositionUpdatedEvent(
-                    EventMapper.ToVehicleData(vehicle.Vehicle!, vehicle),
-                    EventMapper.ToPositionData(vehicle.Position, vehicle),
-                    EventMapper.ToTripData(vehicle.Trip)
-                );
+                // Store current available data for next service cycle
+                var didUpdated = _lastUpdateCache.TryUpdate(entity.Id, eventDataTuple, lastUpdateRecord);
+                if (!didUpdated) logger.LogWarning("Failed to update cache for vehicle {VehicleId}.", entity.Id);
 
                 batch.Add(new EventEnvelope(
-                    nameof(VehiclePositionUpdatedEvent),
+                    nameof(VehiclePositionBatchEvent),
                     DateTimeOffset.UtcNow,
-                    evt
+                    new VehiclePositionBatchEvent(eventData)
                 ));
 
                 logger.LogInformation(
                     "Vehicle {VehicleId} updated: Lat {Lat}, Lon {Lon}, Speed {Speed}, Bearing {Bearing}",
-                    vehicleId, lat, lon, vehicle.Position.Speed, vehicle.Position.Bearing);
+                    entity.Id, 
+                    vehicle.Position.Latitude, 
+                    vehicle.Position.Longitude, 
+                    vehicle.Position.Speed, 
+                    vehicle.Position.Bearing);
             }
 
             logger.LogInformation("Processed GTFS-RT feed: {UpdatedCount} vehicles updated.", batch.Count);
