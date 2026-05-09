@@ -37,43 +37,45 @@ public class Worker(
 
             foreach (var entity in feed.Entities)
             {
-                // TODO: This could cause an false offline bug. Need to consider more carefully.
-                if (entity.Vehicle?.Position == null) continue;
+                if (entity.Vehicle == null) continue;
 
-                var eventData = new List<(VehicleData, PositionData, TripData?)>();
-
-                // Add prior available data
                 var lastUpdateRecord = _lastUpdateCache.GetValueOrDefault(entity.Id);
-                if (lastUpdateRecord != default)
+                var records = new List<VehiclePositionBatchEvent.VehiclePositionRecord>();
+
+                if (entity.Vehicle.Position == null)
                 {
-                    eventData.Add(lastUpdateRecord);
+                    if (lastUpdateRecord == default) continue; // No position data and no cache — skip
+
+                    // No fresh position — publish cached position as stale so client can count stale cycles
+                    var (cachedVehicle, cachedPosition, cachedTrip) = lastUpdateRecord;
+                    records.Add(new VehiclePositionBatchEvent.VehiclePositionRecord(cachedVehicle, cachedPosition, cachedTrip, IsStale: true));
                 }
+                else
+                {
+                    // Add prior available data
+                    if (lastUpdateRecord != default)
+                    {
+                        var (priorVehicle, priorPosition, priorTrip) = lastUpdateRecord;
+                        records.Add(new VehiclePositionBatchEvent.VehiclePositionRecord(priorVehicle, priorPosition, priorTrip, IsStale: false));
+                    }
 
-                // Add current available data
-                var vehicle = entity.Vehicle;
-                var vehicleData = EventMapper.ToVehicleData(vehicle.Vehicle!, vehicle);
-                var positionData = EventMapper.ToPositionData(vehicle.Position, vehicle);
-                var tripData = EventMapper.ToTripData(vehicle.Trip);
-                var eventDataTuple = (vehicleData, positionData, tripData);
-                eventData.Add(eventDataTuple);
+                    // Add current available data
+                    var vehicle = entity.Vehicle;
+                    var vehicleData = EventMapper.ToVehicleData(vehicle.Vehicle!, vehicle);
+                    var positionData = EventMapper.ToPositionData(vehicle.Position, vehicle);
+                    var tripData = EventMapper.ToTripData(vehicle.Trip);
 
-                // Store current available data for next service cycle
-                var didUpdated = _lastUpdateCache.TryUpdate(entity.Id, eventDataTuple, lastUpdateRecord);
-                if (!didUpdated) logger.LogWarning("Failed to update cache for vehicle {VehicleId}.", entity.Id);
+                    records.Add(new VehiclePositionBatchEvent.VehiclePositionRecord(vehicleData, positionData, tripData, IsStale: false));
+
+                    var didUpdate = _lastUpdateCache.TryAdd(entity.Id, (vehicleData, positionData, tripData));
+                    if (!didUpdate) logger.LogWarning("Failed to update cache for vehicle {VehicleId}.", entity.Id);
+                }
 
                 batch.Add(new EventEnvelope(
                     nameof(VehiclePositionBatchEvent),
                     DateTimeOffset.UtcNow,
-                    new VehiclePositionBatchEvent(eventData)
+                    new VehiclePositionBatchEvent(records)
                 ));
-
-                logger.LogInformation(
-                    "Vehicle {VehicleId} updated: Lat {Lat}, Lon {Lon}, Speed {Speed}, Bearing {Bearing}",
-                    entity.Id, 
-                    vehicle.Position.Latitude, 
-                    vehicle.Position.Longitude, 
-                    vehicle.Position.Speed, 
-                    vehicle.Position.Bearing);
             }
 
             logger.LogInformation("Processed GTFS-RT feed: {UpdatedCount} vehicles updated.", batch.Count);
