@@ -2,6 +2,10 @@ using ChefKnifeStudios.TransitJazz.Server.TransitDataWorker;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("RouteShapeApi", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["WebApi:BaseUrl"]!);
+});
 builder.Services.AddSingleton<TokenProvider>();
 builder.Services.AddSingleton<ITransitHubPublisher, SignalRHubPublisher>();
 builder.Services.AddHostedService<Worker>();
