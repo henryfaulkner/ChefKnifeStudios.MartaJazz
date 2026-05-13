@@ -144,4 +144,30 @@ public partial class Map : ComponentBase
             Console.WriteLine(ex.ToString());
         }
     }
+
+    public async Task LoadRouteGeometryForAnimationAsync(string routeId, double[][] coordinates)
+    {
+        try
+        {
+            Console.WriteLine($"[Map] LoadRouteGeometryForAnimation: routeId={routeId} coords={coordinates.Length}");
+            await JsRuntime.InvokeVoidAsync("ChefMapAnimator.loadRouteGeometry", routeId, coordinates);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Map] LoadRouteGeometryForAnimation failed for routeId={routeId}: {ex}");
+        }
+    }
+
+    public async Task ProcessNearestPointBatchAsync(object[] records)
+    {
+        try
+        {
+            Console.WriteLine($"[Map] ProcessNearestPointBatch: {records.Length} records → JS");
+            await JsRuntime.InvokeVoidAsync("ChefMapAnimator.processNearestPointBatch", ElementId, records);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Map] ProcessNearestPointBatch failed: {ex}");
+        }
+    }
 }

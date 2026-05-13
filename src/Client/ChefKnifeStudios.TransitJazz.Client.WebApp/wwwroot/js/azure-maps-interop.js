@@ -197,6 +197,8 @@ atlas.Map.prototype.initDataSourceForVehiclePositions = async function (containe
     dsVehicles = new atlas.source.DataSource(sourceId);
     map.sources.add(dsVehicles);
 
+    ChefMapAnimator._datasource = dsVehicles;
+
     let vehicleSymbolLayer = new atlas.layer.SymbolLayer(dsVehicles, 'vehicle-positions-layer', {
         iconOptions: {
             image: ['coalesce', ['get', 'pinIcon'], 'stop-pin-red'],
