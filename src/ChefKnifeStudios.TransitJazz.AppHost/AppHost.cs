@@ -11,4 +11,8 @@ builder.AddProject<Projects.ChefKnifeStudios_TransitJazz_Client_WebApp>("webfron
     .WithReference(apiService)
     .WaitFor(apiService);
 
+builder.AddProject<Projects.ChefKnifeStudios_TransitJazz_Server_TransitDataWorker>("transitdataworker")
+    .WithReference(apiService)
+    .WaitFor(apiService);
+
 builder.Build().Run();

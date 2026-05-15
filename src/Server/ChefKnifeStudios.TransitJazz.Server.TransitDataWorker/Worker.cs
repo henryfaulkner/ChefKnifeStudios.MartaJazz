@@ -1,4 +1,5 @@
 using ChefKnifeStudios.TransitJazz.Shared.Events;
+using ChefKnifeStudios.TransitJazz.Shared.Geospatial;
 using ChefKnifeStudios.TransitJazz.Shared.GtfsData;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -16,21 +17,17 @@ public class Worker(
     readonly ConcurrentDictionary<string, VehicleState> _vehicleStates = new();
     readonly string _gtfsRtUrl = "https://gtfs-rt.itsmarta.com/TMGTFSRealTimeWebService/vehicle/vehiclepositions.pb";
 
-    ILookup<string, RoutePoint>? _routeSpatialIndex;
+    IReadOnlyDictionary<string, RoutePoint[]>? _routeIndex;
 
-    /// <summary>
-    /// Starts the worker loop: initializes the SignalR connection and spatial index,
-    /// launches background maintenance tasks, then polls the GTFS-RT feed every 10 seconds.
-    /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("TransitDataWorker started.");
 
         await transitHubPublisher.StartAsync(stoppingToken);
-        await InitializeRouteSpatialIndexAsync(stoppingToken);
+        await InitializeRouteIndexAsync(stoppingToken);
 
         _ = Task.Run(() => PruneStaleVehicleStatesAsync(stoppingToken), stoppingToken);
-        _ = Task.Run(() => RefreshRouteSpatialIndexAsync(stoppingToken), stoppingToken);
+        _ = Task.Run(() => RefreshRouteIndexAsync(stoppingToken), stoppingToken);
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
 
@@ -41,7 +38,7 @@ public class Worker(
             {
                 await ProcessGtfsRtFeedAsync(feed, stoppingToken);
 
-                if (_routeSpatialIndex != null)
+                if (_routeIndex != null)
                 {
                     await ProcessSpatialReconciliationAsync(feed, stoppingToken);
                 }
@@ -49,35 +46,31 @@ public class Worker(
         }
     }
 
-    /// <summary>
-    /// Transforms route shape geometries into a geohash-keyed lookup for O(1) spatial candidate retrieval.
-    /// </summary>
-    /// <param name="shapes">Route shape features with GeoJSON coordinates in [lon, lat] order.</param>
-    /// <returns>A lookup keyed by 5-character geohash prefix, containing all route points in that cell.</returns>
-    ILookup<string, RoutePoint> BuildSpatialIndex(List<RouteShapeFeature> shapes)
+    IReadOnlyDictionary<string, RoutePoint[]> BuildRouteIndex(List<RouteShapeFeature> shapes)
     {
-        var entries = new List<(string Hash, RoutePoint Point)>();
+        var routeGroups = new Dictionary<string, List<RoutePoint>>();
 
         foreach (var shape in shapes)
         {
+            var key = shape.Properties.RouteShortName ?? shape.Properties.RouteId;
+            if (!routeGroups.TryGetValue(key, out var points))
+            {
+                points = new List<RoutePoint>();
+                routeGroups[key] = points;
+            }
+
             foreach (var coord in shape.Geometry.Coordinates)
             {
-                // GeoJSON order: [lon, lat]
                 double lon = coord[0];
                 double lat = coord[1];
-                string hash = GeohashEncoder.Encode(lat, lon, 5);
-                entries.Add((hash, new RoutePoint(shape.Properties.RouteId, lat, lon)));
+                points.Add(new RoutePoint(key, lat, lon));
             }
         }
 
-        return entries.ToLookup(x => x.Hash, x => x.Point);
+        return routeGroups.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToArray());
     }
 
-    /// <summary>
-    /// Fetches route shapes from the WebAPI and builds the spatial index.
-    /// Retries with exponential backoff up to 5 times on failure.
-    /// </summary>
-    async Task InitializeRouteSpatialIndexAsync(CancellationToken ct)
+    async Task InitializeRouteIndexAsync(CancellationToken ct)
     {
         int maxRetries = 5;
         for (int attempt = 1; attempt <= maxRetries; attempt++)
@@ -102,13 +95,13 @@ public class Worker(
                     continue;
                 }
 
-                _routeSpatialIndex = BuildSpatialIndex(shapes);
+                _routeIndex = BuildRouteIndex(shapes);
                 sw.Stop();
 
-                int bucketCount = _routeSpatialIndex.Count;
-                int totalPoints = _routeSpatialIndex.Sum(g => g.Count());
-                logger.LogInformation("Built spatial index: {BucketCount} buckets, {TotalPoints} total points in {ElapsedMs}ms",
-                    bucketCount, totalPoints, sw.ElapsedMilliseconds);
+                int routeCount = _routeIndex.Count;
+                int totalPoints = _routeIndex.Values.Sum(pts => pts.Length);
+                logger.LogInformation("Built route index: {RouteCount} routes, {TotalPoints} total points in {ElapsedMs}ms",
+                    routeCount, totalPoints, sw.ElapsedMilliseconds);
                 return;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -117,7 +110,7 @@ public class Worker(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to initialize route spatial index (attempt {Attempt}/{MaxRetries}).", attempt, maxRetries);
+                logger.LogError(ex, "Failed to initialize route index (attempt {Attempt}/{MaxRetries}).", attempt, maxRetries);
                 if (attempt < maxRetries)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), ct);
@@ -125,47 +118,18 @@ public class Worker(
             }
         }
 
-        logger.LogWarning("Could not initialize route spatial index after {MaxRetries} attempts. V2 reconciliation will be skipped until index is built.", maxRetries);
+        logger.LogWarning("Could not initialize route index after {MaxRetries} attempts. V2 reconciliation will be skipped until index is built.", maxRetries);
     }
 
-    /// <summary>
-    /// Finds the closest route point to a bus position using Haversine distance.
-    /// </summary>
-    /// <param name="busLat">Bus latitude in degrees.</param>
-    /// <param name="busLon">Bus longitude in degrees.</param>
-    /// <param name="candidates">Route points within the same geohash bucket.</param>
-    /// <returns>The nearest route point, or null if candidates is empty.</returns>
-    RoutePoint? FindNearestRoutePoint(double busLat, double busLon, IEnumerable<RoutePoint> candidates)
-    {
-        RoutePoint? nearest = null;
-        double minDistance = double.MaxValue;
-
-        foreach (var candidate in candidates)
-        {
-            double distance = HaversineCalculator.DistanceKm(busLat, busLon, candidate.Lat, candidate.Lon);
-            if (distance < minDistance)
-            {
-                minDistance = distance;
-                nearest = candidate;
-            }
-        }
-
-        return nearest;
-    }
-
-    /// <summary>
-    /// V2 processing pass: geohash-encodes each bus position, finds the nearest route point,
-    /// and emits a batched event for vehicles that moved to a different route point since the last cycle.
-    /// </summary>
     async Task ProcessSpatialReconciliationAsync(FeedMessage feed, CancellationToken ct)
     {
         try
         {
-            var index = _routeSpatialIndex;
+            var index = _routeIndex;
             if (index == null) return;
 
             var batch = new List<RouteNearestPointBatchEvent.RouteNearestPointRecord>();
-            int movedCount = 0, unchangedCount = 0, skippedCount = 0;
+            int movedCount = 0, unchangedCount = 0, skippedNoRouteId = 0, skippedUnknownRoute = 0;
 
             foreach (var entity in feed.Entities)
             {
@@ -174,27 +138,28 @@ public class Worker(
                     if (entity.Vehicle?.Position == null) continue;
 
                     string vehicleId = entity.Vehicle.Vehicle?.Id ?? entity.Id;
+                    string? routeId = entity.Vehicle.Trip?.RouteId;
+
+                    if (string.IsNullOrEmpty(routeId))
+                    {
+                        skippedNoRouteId++;
+                        continue;
+                    }
+
+                    if (!index.TryGetValue(routeId, out var routePoints))
+                    {
+                        skippedUnknownRoute++;
+                        continue;
+                    }
+
                     double lat = (double)entity.Vehicle.Position.Latitude;
                     double lon = (double)entity.Vehicle.Position.Longitude;
                     var now = DateTime.UtcNow;
 
-                    string prefix = GeohashEncoder.Encode(lat, lon, 5);
-                    var candidates = index[prefix];
+                    var snap = RouteSnapper.FindNearest(lat, lon, routePoints);
+                    if (snap == null) continue;
 
-                    if (!candidates.Any())
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    var nearest = FindNearestRoutePoint(lat, lon, candidates);
-                    if (nearest == null)
-                    {
-                        skippedCount++;
-                        continue;
-                    }
-
-                    var nearestValue = nearest.Value;
+                    var nearest = snap.Value.Point;
 
                     if (_vehicleStates.TryGetValue(vehicleId, out var prior))
                     {
@@ -203,20 +168,21 @@ public class Worker(
                             continue;
                         }
 
-                        if (prior.NearestLat != nearestValue.Lat || prior.NearestLon != nearestValue.Lon)
+                        batch.Add(new RouteNearestPointBatchEvent.RouteNearestPointRecord(
+                            vehicleId,
+                            nearest.RouteId,
+                            prior.NearestLat,
+                            prior.NearestLon,
+                            prior.LastUpdated,
+                            nearest.Lat,
+                            nearest.Lon,
+                            now,
+                            entity.Vehicle.Position.Speed,
+                            entity.Vehicle.Position.Bearing
+                        ));
+
+                        if (prior.NearestLat != nearest.Lat || prior.NearestLon != nearest.Lon)
                         {
-                            batch.Add(new RouteNearestPointBatchEvent.RouteNearestPointRecord(
-                                vehicleId,
-                                nearestValue.RouteId,
-                                prior.NearestLat,
-                                prior.NearestLon,
-                                prior.LastUpdated,
-                                nearestValue.Lat,
-                                nearestValue.Lon,
-                                now,
-                                entity.Vehicle.Position.Speed,
-                                entity.Vehicle.Position.Bearing
-                            ));
                             movedCount++;
                         }
                         else
@@ -224,12 +190,28 @@ public class Worker(
                             unchangedCount++;
                         }
                     }
+                    else
+                    {
+                        batch.Add(new RouteNearestPointBatchEvent.RouteNearestPointRecord(
+                            vehicleId,
+                            nearest.RouteId,
+                            nearest.Lat,
+                            nearest.Lon,
+                            now,
+                            nearest.Lat,
+                            nearest.Lon,
+                            now,
+                            entity.Vehicle.Position.Speed,
+                            entity.Vehicle.Position.Bearing
+                        ));
+                        movedCount++;
+                    }
 
                     _vehicleStates[vehicleId] = new VehicleState(
-                        nearestValue.Lat,
-                        nearestValue.Lon,
+                        nearest.Lat,
+                        nearest.Lon,
                         now,
-                        nearestValue.RouteId,
+                        nearest.RouteId,
                         entity.Vehicle.Position.Speed,
                         entity.Vehicle.Position.Bearing);
                 }
@@ -239,8 +221,9 @@ public class Worker(
                 }
             }
 
-            logger.LogInformation("Spatial reconciliation: {Moved} moved, {Unchanged} unchanged, {Skipped} skipped.",
-                movedCount, unchangedCount, skippedCount);
+            logger.LogInformation(
+                "Spatial reconciliation: {Moved} moved, {Unchanged} unchanged, {SkippedNoRouteId} skippedNoRouteId, {SkippedUnknownRoute} skippedUnknownRoute.",
+                movedCount, unchangedCount, skippedNoRouteId, skippedUnknownRoute);
 
             if (batch.Count > 0)
             {
@@ -263,10 +246,6 @@ public class Worker(
         }
     }
 
-    /// <summary>
-    /// Background task that removes vehicle state entries not updated in 20+ minutes.
-    /// Runs every 5 minutes to bound memory growth from offline vehicles.
-    /// </summary>
     async Task PruneStaleVehicleStatesAsync(CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
@@ -299,11 +278,7 @@ public class Worker(
         }
     }
 
-    /// <summary>
-    /// Background task that rebuilds the route spatial index every 24 hours.
-    /// Retains the existing index if the refresh fails or returns empty data.
-    /// </summary>
-    async Task RefreshRouteSpatialIndexAsync(CancellationToken ct)
+    async Task RefreshRouteIndexAsync(CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromHours(24));
 
@@ -327,13 +302,13 @@ public class Worker(
                     continue;
                 }
 
-                var newIndex = BuildSpatialIndex(shapes);
-                _routeSpatialIndex = newIndex;
+                var newIndex = BuildRouteIndex(shapes);
+                _routeIndex = newIndex;
 
-                int bucketCount = newIndex.Count;
-                int totalPoints = newIndex.Sum(g => g.Count());
-                logger.LogInformation("Refreshed spatial index: {BucketCount} buckets, {TotalPoints} total points.",
-                    bucketCount, totalPoints);
+                int routeCount = newIndex.Count;
+                int totalPoints = newIndex.Values.Sum(pts => pts.Length);
+                logger.LogInformation("Refreshed route index: {RouteCount} routes, {TotalPoints} total points.",
+                    routeCount, totalPoints);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -341,15 +316,11 @@ public class Worker(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to refresh route spatial index. Retaining existing index.");
+                logger.LogError(ex, "Failed to refresh route index. Retaining existing index.");
             }
         }
     }
 
-    /// <summary>
-    /// V1 processing pass: maps each GTFS-RT entity to a <see cref="VehiclePositionBatchEvent"/>
-    /// and publishes the batch via SignalR. Emits cached positions as stale when fresh data is absent.
-    /// </summary>
     async Task ProcessGtfsRtFeedAsync(FeedMessage feed, CancellationToken ct)
     {
         try
@@ -417,10 +388,6 @@ public class Worker(
         }
     }
 
-    /// <summary>
-    /// Downloads and deserializes the GTFS-RT vehicle positions protobuf feed from MARTA.
-    /// </summary>
-    /// <returns>The parsed feed, or null if the request failed.</returns>
     async Task<FeedMessage?> FetchGtfsRtFeedAsync(CancellationToken ct)
     {
         var client = httpClientFactory.CreateClient();

@@ -17,8 +17,11 @@ public sealed class SignalRHubPublisher : ITransitHubPublisher, IAsyncDisposable
     {
         _logger = logger;
         
-        var hubUrl = configuration["SignalR:HubUrl"]
-            ?? throw new InvalidOperationException("Missing SignalR:HubUrl");
+        var apiBaseUrl = configuration["services:apiservice:https:0"];
+        var hubUrl = apiBaseUrl != null
+            ? $"{apiBaseUrl}/hubs/worker-transit"
+            : configuration["SignalR:HubUrl"]
+              ?? throw new InvalidOperationException("Missing SignalR:HubUrl");
 
         _connection = new HubConnectionBuilder()
             .WithUrl(hubUrl, opts =>

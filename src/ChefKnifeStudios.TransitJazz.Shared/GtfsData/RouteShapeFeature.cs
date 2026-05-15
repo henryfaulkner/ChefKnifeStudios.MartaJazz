@@ -13,6 +13,7 @@ public sealed record RouteShapeGeometry(
 
 public sealed record RouteShapeProperties(
     string RouteId,
+    string? RouteShortName,
     string? Color,
     string? TextColor
 );
