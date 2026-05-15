@@ -29,7 +29,7 @@ public class Worker(
         _ = Task.Run(() => PruneStaleVehicleStatesAsync(stoppingToken), stoppingToken);
         _ = Task.Run(() => RefreshRouteIndexAsync(stoppingToken), stoppingToken);
 
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
@@ -168,26 +168,43 @@ public class Worker(
                             continue;
                         }
 
+                        batch.Add(new RouteNearestPointBatchEvent.RouteNearestPointRecord(
+                            vehicleId,
+                            nearest.RouteId,
+                            prior.NearestLat,
+                            prior.NearestLon,
+                            prior.LastUpdated,
+                            nearest.Lat,
+                            nearest.Lon,
+                            now,
+                            entity.Vehicle.Position.Speed,
+                            entity.Vehicle.Position.Bearing
+                        ));
+
                         if (prior.NearestLat != nearest.Lat || prior.NearestLon != nearest.Lon)
                         {
-                            batch.Add(new RouteNearestPointBatchEvent.RouteNearestPointRecord(
-                                vehicleId,
-                                nearest.RouteId,
-                                prior.NearestLat,
-                                prior.NearestLon,
-                                prior.LastUpdated,
-                                nearest.Lat,
-                                nearest.Lon,
-                                now,
-                                entity.Vehicle.Position.Speed,
-                                entity.Vehicle.Position.Bearing
-                            ));
                             movedCount++;
                         }
                         else
                         {
                             unchangedCount++;
                         }
+                    }
+                    else
+                    {
+                        batch.Add(new RouteNearestPointBatchEvent.RouteNearestPointRecord(
+                            vehicleId,
+                            nearest.RouteId,
+                            nearest.Lat,
+                            nearest.Lon,
+                            now,
+                            nearest.Lat,
+                            nearest.Lon,
+                            now,
+                            entity.Vehicle.Position.Speed,
+                            entity.Vehicle.Position.Bearing
+                        ));
+                        movedCount++;
                     }
 
                     _vehicleStates[vehicleId] = new VehicleState(
