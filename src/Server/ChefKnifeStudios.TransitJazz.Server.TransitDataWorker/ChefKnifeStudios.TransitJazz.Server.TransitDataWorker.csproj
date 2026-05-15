@@ -17,5 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\ChefKnifeStudios.TransitJazz.Shared\ChefKnifeStudios.TransitJazz.Shared.csproj" />
+    <ProjectReference Include="..\..\ChefKnifeStudios.TransitJazz.ServiceDefaults\ChefKnifeStudios.TransitJazz.ServiceDefaults.csproj" />
   </ItemGroup>
 </Project>
