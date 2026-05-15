@@ -1,22 +1,11 @@
 using System;
 
-namespace ChefKnifeStudios.TransitJazz.Server.TransitDataWorker;
+namespace ChefKnifeStudios.TransitJazz.Shared.Geospatial;
 
-/// <summary>
-/// Computes great-circle distances between coordinate pairs using the Haversine formula.
-/// </summary>
 public static class HaversineCalculator
 {
     const double EarthRadiusKm = 6371.0;
 
-    /// <summary>
-    /// Calculates the great-circle distance in kilometers between two points on Earth.
-    /// </summary>
-    /// <param name="lat1">Latitude of the first point in degrees.</param>
-    /// <param name="lon1">Longitude of the first point in degrees.</param>
-    /// <param name="lat2">Latitude of the second point in degrees.</param>
-    /// <param name="lon2">Longitude of the second point in degrees.</param>
-    /// <returns>Distance in kilometers.</returns>
     public static double DistanceKm(double lat1, double lon1, double lat2, double lon2)
     {
         double dLat = DegreesToRadians(lat2 - lat1);

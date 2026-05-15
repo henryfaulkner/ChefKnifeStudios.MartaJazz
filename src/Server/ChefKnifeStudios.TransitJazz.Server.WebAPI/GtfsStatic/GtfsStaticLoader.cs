@@ -33,20 +33,24 @@ public class GtfsStaticLoader(
 
             using var archive = new ZipArchive(new MemoryStream(zipBytes), ZipArchiveMode.Read);
 
-            // routeToShape: routeId → shapeId (one representative shape per route)
             var routeToShape = ParseRouteToShapeMap(archive);
             var shapes = ParseShapes(archive);
-            var routeColors = ParseRouteColors(archive);
+            var routeMetadata = ParseRouteMetadata(archive);
 
             int stored = 0;
             foreach (var (routeId, shapeId) in routeToShape)
             {
                 if (!shapes.TryGetValue(shapeId, out var points) || points.Count == 0) continue;
 
-                var color = routeColors.TryGetValue(routeId, out var c) ? c.RouteColor : null;
-                var textColor = routeColors.TryGetValue(routeId, out var tc) ? tc.TextColor : null;
+                string? shortName = null, color = null, textColor = null;
+                if (routeMetadata.TryGetValue(routeId, out var meta))
+                {
+                    shortName = meta.RouteShortName;
+                    color = meta.RouteColor;
+                    textColor = meta.TextColor;
+                }
 
-                var geoJson = BuildLineStringFeature(routeId, points, color, textColor);
+                var geoJson = BuildLineStringFeature(routeId, shortName, points, color, textColor);
                 await routeShapeRepo.SetAsync(routeId, geoJson, cancellationToken);
                 stored++;
             }
@@ -129,15 +133,16 @@ public class GtfsStaticLoader(
         return result;
     }
 
-    static Dictionary<string, (string? RouteColor, string? TextColor)> ParseRouteColors(ZipArchive archive)
+    static Dictionary<string, (string? RouteShortName, string? RouteColor, string? TextColor)> ParseRouteMetadata(ZipArchive archive)
     {
-        var result = new Dictionary<string, (string?, string?)>();
+        var result = new Dictionary<string, (string?, string?, string?)>();
         var entry = archive.GetEntry("routes.txt");
         if (entry == null) return result;
 
         using var reader = new StreamReader(entry.Open());
         var header = (reader.ReadLine() ?? string.Empty).TrimStart('﻿').Replace("\r", "").Split(',');
         int routeIdx = Array.IndexOf(header, "route_id");
+        int shortNameIdx = Array.IndexOf(header, "route_short_name");
         int colorIdx = Array.IndexOf(header, "route_color");
         int textColorIdx = Array.IndexOf(header, "route_text_color");
         if (routeIdx < 0) return result;
@@ -148,10 +153,12 @@ public class GtfsStaticLoader(
             var cols = line.Split(',');
             if (cols.Length <= routeIdx) continue;
             var routeId = cols[routeIdx].Trim();
+            var shortName = shortNameIdx >= 0 && cols.Length > shortNameIdx ? cols[shortNameIdx].Trim() : null;
+            if (string.IsNullOrEmpty(shortName)) shortName = null;
             var color = colorIdx >= 0 && cols.Length > colorIdx ? NormalizeColor(cols[colorIdx].Trim()) : null;
             var textColor = textColorIdx >= 0 && cols.Length > textColorIdx ? NormalizeColor(cols[textColorIdx].Trim()) : null;
             if (!string.IsNullOrEmpty(routeId))
-                result[routeId] = (color, textColor);
+                result[routeId] = (shortName, color, textColor);
         }
         return result;
     }
@@ -164,6 +171,7 @@ public class GtfsStaticLoader(
 
     static string BuildLineStringFeature(
         string routeId,
+        string? routeShortName,
         List<(double Lat, double Lon, int Seq)> points,
         string? color,
         string? textColor)
@@ -183,6 +191,7 @@ public class GtfsStaticLoader(
 
         sb.Append("]},\"properties\":{");
         sb.Append($"\"routeId\":{JsonSerializer.Serialize(routeId)}");
+        sb.Append($",\"routeShortName\":{(routeShortName != null ? JsonSerializer.Serialize(routeShortName) : "null")}");
         sb.Append($",\"color\":{(color != null ? JsonSerializer.Serialize(color) : "null")}");
         sb.Append($",\"textColor\":{(textColor != null ? JsonSerializer.Serialize(textColor) : "null")}");
         sb.Append("}}");
