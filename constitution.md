@@ -1,10 +1,9 @@
 <!--
 Sync Impact Report:
-- Version change: 1.0.0 → 2.0.0 (Major rewrite reflecting actual architecture)
-- Modified principles: III rewritten (two-pass pipeline with spatial reconciliation), new VI added (GTFS ID mapping)
-- Added sections: Solution Structure, Two-Pass Processing Pipeline, GTFS Data Pipeline, SignalR Event System
-- Removed sections: Music Engine Flow (outdated naming), duplicate Event Message JSON (was identical to input)
-- Restructured: Tech Stack & Architecture now reflects actual 11-project solution
+- Version change: 2.0.0 → 2.1.0 (Aspire orchestration for all three services)
+- Modified principles: I expanded (Aspire service discovery mandate for dev-time inter-service URLs)
+- Modified sections: Solution Structure comments updated, Backend — TransitDataWorker expanded with ServiceDefaults and service discovery details
+- Added guidance: Inter-service URLs resolved via Aspire service discovery with config fallbacks
 - Templates requiring updates:
   - ✅ .specify/templates/plan-template.md (Constitution Check section exists)
   - ✅ .specify/templates/spec-template.md (scope/requirements alignment verified)
@@ -22,7 +21,7 @@ The application MUST use a decoupled cloud architecture hosted on Azure. The sys
 2. **ASP.NET Core WebAPI** — hosts SignalR hub, serves GTFS static data, exposes REST endpoints
 3. **TransitDataWorker** — background service that polls GTFS-RT, performs spatial reconciliation, publishes events via SignalR client
 
-The frontend and backend communicate via SignalR (WSS) and HTTPS. The Worker connects to the WebAPI's SignalR hub as a client to publish events.
+The frontend and backend communicate via SignalR (WSS) and HTTPS. The Worker connects to the WebAPI's SignalR hub as a client to publish events. All three services are orchestrated locally via .NET Aspire (`AppHost`), which provides service discovery, health checks, and OpenTelemetry collection through the Aspire dashboard. Inter-service URLs MUST be resolved via Aspire service discovery at development time, with configuration-based fallbacks for standalone or production deployments.
 
 ### II. No Frontend Secrets
 The frontend MUST NEVER hold secrets. To authenticate with Azure Maps, the frontend MUST call the Azure Maps Auth Function to request a temporary token. All secrets (Client ID, Client Secret) MUST be stored securely in the Azure Function, not in client-side code.
@@ -68,8 +67,8 @@ ChefKnifeStudios.TransitJazz.sln
 │   └── ChefKnifeStudios.TransitJazz.Client.WebApp     # Blazor WASM app
 │
 ├── Orchestration
-│   ├── ChefKnifeStudios.TransitJazz.AppHost           # .NET Aspire orchestrator
-│   └── ChefKnifeStudios.TransitJazz.ServiceDefaults   # Aspire service defaults, OTEL config
+│   ├── ChefKnifeStudios.TransitJazz.AppHost           # .NET Aspire orchestrator (WebAPI, WebApp, Worker)
+│   └── ChefKnifeStudios.TransitJazz.ServiceDefaults   # Aspire service defaults, OTEL config, service discovery
 │
 └── POC
     └── BusDataPoc/MartaJazz.Engine                    # Go-based early prototype (archived)
@@ -96,9 +95,10 @@ ChefKnifeStudios.TransitJazz.sln
 - Uses Scalar for OpenAPI documentation
 
 ### Backend — TransitDataWorker
-- .NET Worker Service (`BackgroundService`)
+- .NET Worker Service (`BackgroundService`) with Aspire ServiceDefaults (OTEL, service discovery, resilience)
 - Polls MARTA GTFS-RT protobuf feed (`vehiclepositions.pb`) on a configurable interval
 - Connects to the WebAPI's SignalR hub as a **client** (not a host) via `SignalRHubPublisher`
+- Resolves WebAPI URL via Aspire service discovery (`services:apiservice:https:0`), falling back to `WebApi:BaseUrl` / `SignalR:HubUrl` config
 - Maintains:
   - `_lastUpdateCache` — vehicle position delta detection for V1 events
   - `_vehicleStates` — nearest-point delta detection for V2 events
@@ -201,4 +201,4 @@ Stored in `IKeyValueRepository<string>` keyed by `route_id` from GTFS static:
 - No unauthorized technology substitutions without constitution amendment
 - Azure services MUST be used as specified (Static Web Apps, Container Apps, Functions, Log Analytics, ACR)
 
-**Version**: 2.0.0 | **Ratified**: 2026-05-03 | **Last Amended**: 2026-05-14
+**Version**: 2.1.0 | **Ratified**: 2026-05-03 | **Last Amended**: 2026-05-14
