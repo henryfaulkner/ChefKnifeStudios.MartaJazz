@@ -146,6 +146,21 @@ window.ChefMap = {
         }
     },
 
+    addRouteShapeFeature: function (containerDivId, routeId, coordinates, color) {
+        let map = ChefMap.maps[containerDivId];
+        if (map == null) return;
+
+        let ds = map.sources.getById('route-shapes');
+        if (ds == null) return;
+
+        let feature = new atlas.data.Feature(
+            new atlas.data.LineString(coordinates.map(c => [c[0], c[1]])),
+            { routeId: routeId, color: color || '#0078D4' },
+            'route-' + routeId
+        );
+        ds.add(feature);
+    },
+
     showRouteShape: function (containerDivId, geoJsonString) {
         let map = ChefMap.maps[containerDivId];
         if (map == null) return;
@@ -194,6 +209,20 @@ atlas.Map.prototype.initDataSourceForVehiclePositions = async function (containe
         map.imageSprite.add(id, `${mapPinImagesBaseUrl}/${id}.png`)
     ));
 
+    // Route shapes layer — added first so it renders below vehicle markers
+    let routeDs = new atlas.source.DataSource('route-shapes');
+    map.sources.add(routeDs);
+
+    let routeLayer = new atlas.layer.LineLayer(routeDs, 'route-shapes-layer', {
+        strokeColor: ['coalesce', ['get', 'color'], '#0078D4'],
+        strokeWidth: 4,
+        strokeOpacity: 0.85,
+        lineJoin: 'round',
+        lineCap: 'round'
+    });
+
+    map.layers.add(routeLayer);
+
     dsVehicles = new atlas.source.DataSource(sourceId);
     map.sources.add(dsVehicles);
 
@@ -211,20 +240,6 @@ atlas.Map.prototype.initDataSourceForVehiclePositions = async function (containe
     });
 
     map.layers.add(vehicleSymbolLayer);
-
-    // Route shapes layer — rendered below vehicle markers
-    let routeDs = new atlas.source.DataSource('route-shapes');
-    map.sources.add(routeDs);
-
-    let routeLayer = new atlas.layer.LineLayer(routeDs, 'route-shapes-layer', {
-        strokeColor: ['coalesce', ['get', 'color'], '#0078D4'],
-        strokeWidth: 4,
-        strokeOpacity: 0.85,
-        lineJoin: 'round',
-        lineCap: 'round'
-    });
-
-    map.layers.add(routeLayer);
 
     // change the hover cursor for pins to pointer
     map.events.add('mouseover', [vehicleSymbolLayer], () => {

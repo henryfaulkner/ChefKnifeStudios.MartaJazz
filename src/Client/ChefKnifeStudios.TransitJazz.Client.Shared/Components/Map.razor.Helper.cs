@@ -145,6 +145,18 @@ public partial class Map : ComponentBase
         }
     }
 
+    public async Task AddRouteShapeFeatureAsync(string routeId, double[][] coordinates, string? color)
+    {
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("ChefMap.addRouteShapeFeature", ElementId, routeId, coordinates, color);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Map] AddRouteShapeFeature failed for routeId={routeId}: {ex}");
+        }
+    }
+
     public async Task LoadRouteGeometryForAnimationAsync(string routeId, double[][] coordinates)
     {
         try

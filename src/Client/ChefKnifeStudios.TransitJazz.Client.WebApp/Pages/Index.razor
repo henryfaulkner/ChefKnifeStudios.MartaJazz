@@ -1,0 +1,53 @@
+@page "/"
+
+<PageTitle>Transit Jazz</PageTitle>
+
+<div class="linktree">
+    <h1 class="linktree__title">Transit Jazz</h1>
+    <nav class="linktree__links">
+        <a href="/transit-map" class="linktree__link">Transit Map</a>
+        <a href="/maps" class="linktree__link">Azure Maps Test</a>
+        <a href="/signalr" class="linktree__link">SignalR Test</a>
+    </nav>
+</div>
+
+<style>
+    .linktree {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        gap: 1.5rem;
+        font-family: sans-serif;
+    }
+
+    .linktree__title {
+        margin: 0;
+        font-size: 2rem;
+    }
+
+    .linktree__links {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        width: 100%;
+        max-width: 320px;
+    }
+
+    .linktree__link {
+        display: block;
+        padding: 0.875rem 1.5rem;
+        border: 2px solid currentColor;
+        border-radius: 8px;
+        text-align: center;
+        text-decoration: none;
+        font-size: 1rem;
+        font-weight: 500;
+        transition: opacity 0.15s;
+    }
+
+    .linktree__link:hover {
+        opacity: 0.75;
+    }
+</style>

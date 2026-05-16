@@ -22,7 +22,8 @@ public partial class TransitMap : ComponentBase, IDisposable
 
     Map? _map;
     bool _mapReady;
-    List<EventEnvelope>? _pendingBatch;
+    IEnumerable<EventEnvelope>? _pendingBatch;
+
 
     string _connectionLabel = "Connecting…";
     string _connectionCssClass = "connecting";
@@ -65,9 +66,10 @@ public partial class TransitMap : ComponentBase, IDisposable
         _map = map;
         _mapReady = true;
 
-        Logger.LogDebug("TransitMap: pushing {Count} route geometries to animator", _routeShapeCache.Count);
+        Logger.LogDebug("TransitMap: pushing {Count} route geometries to animator and map layer", _routeShapeCache.Count);
         foreach (var (routeId, feature) in _routeShapeCache)
         {
+            await _map.AddRouteShapeFeatureAsync(routeId, feature.Geometry.Coordinates, feature.Properties.Color);
             await _map.LoadRouteGeometryForAnimationAsync(routeId, feature.Geometry.Coordinates);
         }
         Logger.LogDebug("TransitMap: route geometry push complete");
@@ -80,7 +82,7 @@ public partial class TransitMap : ComponentBase, IDisposable
         }
     }
 
-    async Task HandleVehicleBatchAsync(List<EventEnvelope> batch)
+    async Task HandleVehicleBatchAsync(IEnumerable<EventEnvelope> batch)
     {
         if (!_mapReady || _map is null)
         {
@@ -190,7 +192,7 @@ public partial class TransitMap : ComponentBase, IDisposable
         _routeShapeCache.Clear();
         foreach (var routeShapeFeature in res.Value)
         {
-            _routeShapeCache[routeShapeFeature.Properties.RouteId] = routeShapeFeature;
+            _routeShapeCache[routeShapeFeature.Properties.RouteShortName] = routeShapeFeature;
         }
     }
 }
