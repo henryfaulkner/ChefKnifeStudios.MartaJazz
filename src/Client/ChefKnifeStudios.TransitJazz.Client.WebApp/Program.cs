@@ -2,7 +2,7 @@ using Blazored.LocalStorage;
 using ChefKnifeStudios.TransitJazz.Client.Core;
 using ChefKnifeStudios.TransitJazz.Client.Core.Services;
 using ChefKnifeStudios.TransitJazz.Client.Core.Services.EndpointsServices;
-using ChefKnifeStudios.TransitJazz.Client.Shared.EventArgs;
+using ChefKnifeStudios.TransitJazz.Client.Shared.Services.JsInterop;
 using ChefKnifeStudios.TransitJazz.Client.WebApp;
 using ChefKnifeStudios.TransitJazz.Shared;
 using ChefKnifeStudios.TransitJazz.Shared.Enums;
@@ -46,6 +46,8 @@ builder.Services.AddSingleton<IEventNotificationService, EventNotificationServic
 builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationService>();
 
 builder.Services.AddTransient<IGtfsEndpointsService, GtfsEndpointsService>();
+
+builder.Services.AddSingleton<IAudioPlayerJsInterop, AudioPlayerJsInterop>();
 
 builder.Services.AddMatBlazor();
 
