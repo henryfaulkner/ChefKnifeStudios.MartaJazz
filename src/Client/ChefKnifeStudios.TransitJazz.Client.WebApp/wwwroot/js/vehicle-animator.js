@@ -54,8 +54,9 @@ window.ChefMapAnimator = {
         if (startIdx <= endIdx) {
             return routeCoords.slice(startIdx, endIdx + 1);
         }
-        this._log('debug', 'extractSubPath: wrap-around detected', { startIdx: startIdx, endIdx: endIdx, routeLength: routeCoords.length });
-        return routeCoords.slice(startIdx).concat(routeCoords.slice(0, endIdx + 1));
+        // Bus is moving backward along the polyline — take the short reversed slice.
+        // The old wrap-around path shot the bus to the route terminus and back.
+        return routeCoords.slice(endIdx, startIdx + 1).reverse();
     },
 
     interpolateAlongPath: function (subPath, cumDist, t) {

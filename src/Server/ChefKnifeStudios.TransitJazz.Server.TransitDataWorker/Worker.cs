@@ -131,6 +131,7 @@ public class Worker(
             if (index == null) return;
 
             var batch = new List<RouteNearestPointBatchEvent.RouteNearestPointRecord>();
+            var debugBatch = new List<BatchDebugRecord>();
             int movedCount = 0, unchangedCount = 0, skippedNoRouteId = 0, skippedUnknownRoute = 0;
 
             foreach (var entity in feed.Entities)
@@ -158,10 +159,17 @@ public class Worker(
                     double lon = (double)entity.Vehicle.Position.Longitude;
                     var now = DateTime.UtcNow;
 
-                    var snap = RouteSnapper.FindNearest(lat, lon, routePoints);
+                    const int SnapWindowSize = 30;
+
+                    var snap = _vehicleStates.TryGetValue(vehicleId, out var priorForSnap) && priorForSnap.RouteId == routeId
+                        ? RouteSnapper.FindNearestInWindow(lat, lon, routePoints, priorForSnap.SnapIndex, SnapWindowSize)
+                        : RouteSnapper.FindNearest(lat, lon, routePoints);
                     if (snap == null) continue;
 
-                    var nearest = snap.Value.Point;
+                    var snapValue = snap.Value;
+                    var nearest = snapValue.Point;
+                    string outcome;
+                    BatchDebugRecord debugRecord;
 
                     if (_vehicleStates.TryGetValue(vehicleId, out var prior))
                     {
@@ -185,12 +193,40 @@ public class Worker(
 
                         if (prior.NearestLat != nearest.Lat || prior.NearestLon != nearest.Lon)
                         {
+                            outcome = "Moved";
                             movedCount++;
                         }
                         else
                         {
+                            outcome = "Unchanged";
                             unchangedCount++;
                         }
+
+                        debugRecord = new BatchDebugRecord(
+                            VehicleId: vehicleId,
+                            RouteId: nearest.RouteId,
+                            Outcome: outcome,
+                            RawLat: lat,
+                            RawLon: lon,
+                            SnappedLat: nearest.Lat,
+                            SnappedLon: nearest.Lon,
+                            SnapDistanceKm: snapValue.DistanceKm,
+                            SnapIndex: snapValue.Index,
+                            RoutePointCount: routePoints.Length,
+                            PriorRawLat: prior.LastRawLat,
+                            PriorRawLon: prior.LastRawLon,
+                            PriorSnappedLat: prior.NearestLat,
+                            PriorSnappedLon: prior.NearestLon,
+                            PriorSnapDistanceKm: prior.LastSnapDistanceKm,
+                            PriorRouteId: prior.RouteId,
+                            PriorObservationUtc: prior.LastUpdated,
+                            ObservationUtc: now,
+                            DeltaFromPriorSnapKm: HaversineCalculator.DistanceKm(prior.NearestLat, prior.NearestLon, nearest.Lat, nearest.Lon),
+                            DeltaFromPriorRawKm: HaversineCalculator.DistanceKm(prior.LastRawLat, prior.LastRawLon, lat, lon),
+                            SecondsSincePriorObservation: (now - prior.LastUpdated).TotalSeconds,
+                            SpeedMetersPerSec: entity.Vehicle.Position.Speed,
+                            Bearing: entity.Vehicle.Position.Bearing
+                        );
                     }
                     else
                     {
@@ -206,8 +242,37 @@ public class Worker(
                             entity.Vehicle.Position.Speed,
                             entity.Vehicle.Position.Bearing
                         ));
+                        outcome = "FirstObservation";
                         movedCount++;
+
+                        debugRecord = new BatchDebugRecord(
+                            VehicleId: vehicleId,
+                            RouteId: nearest.RouteId,
+                            Outcome: outcome,
+                            RawLat: lat,
+                            RawLon: lon,
+                            SnappedLat: nearest.Lat,
+                            SnappedLon: nearest.Lon,
+                            SnapDistanceKm: snapValue.DistanceKm,
+                            SnapIndex: snapValue.Index,
+                            RoutePointCount: routePoints.Length,
+                            PriorRawLat: null,
+                            PriorRawLon: null,
+                            PriorSnappedLat: null,
+                            PriorSnappedLon: null,
+                            PriorSnapDistanceKm: null,
+                            PriorRouteId: null,
+                            PriorObservationUtc: null,
+                            ObservationUtc: now,
+                            DeltaFromPriorSnapKm: null,
+                            DeltaFromPriorRawKm: null,
+                            SecondsSincePriorObservation: null,
+                            SpeedMetersPerSec: entity.Vehicle.Position.Speed,
+                            Bearing: entity.Vehicle.Position.Bearing
+                        );
                     }
+
+                    debugBatch.Add(debugRecord);
 
                     _vehicleStates[vehicleId] = new VehicleState(
                         nearest.Lat,
@@ -215,7 +280,11 @@ public class Worker(
                         now,
                         nearest.RouteId,
                         entity.Vehicle.Position.Speed,
-                        entity.Vehicle.Position.Bearing);
+                        entity.Vehicle.Position.Bearing,
+                        snapValue.DistanceKm,
+                        lat,
+                        lon,
+                        snapValue.Index);
                 }
                 catch (Exception ex)
                 {
@@ -229,7 +298,7 @@ public class Worker(
 
             if (batch.Count > 0)
             {
-                await WriteBatchToDiskAsync(batch, ct);
+                await WriteBatchToDiskAsync(debugBatch, ct);
 
                 var envelope = new EventEnvelope(
                     nameof(RouteNearestPointBatchEvent),
@@ -392,7 +461,7 @@ public class Worker(
         }
     }
 
-    async Task WriteBatchToDiskAsync(List<RouteNearestPointBatchEvent.RouteNearestPointRecord> batch, CancellationToken ct)
+    async Task WriteBatchToDiskAsync(List<BatchDebugRecord> batch, CancellationToken ct)
     {
         try
         {

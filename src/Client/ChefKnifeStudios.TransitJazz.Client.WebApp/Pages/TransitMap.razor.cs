@@ -32,7 +32,7 @@ public partial class TransitMap : ComponentBase, IDisposable
     readonly Dictionary<string, string> _vehicleRouteMap = new();
 
     // routeId → GeoJSON string (client-side cache, lives for page lifetime)
-    readonly Dictionary<string, RouteShapeFeature> _routeShapeCache = new();
+    readonly Dictionary<string, RouteShapeFeature> _routeShapeCache = new(StringComparer.Ordinal);
 
     static CameraOptions DefaultCameraOptions
         => new() { Center = new Position(33.749, -84.388), Zoom = 10 };
@@ -192,7 +192,8 @@ public partial class TransitMap : ComponentBase, IDisposable
         _routeShapeCache.Clear();
         foreach (var routeShapeFeature in res.Value)
         {
-            _routeShapeCache[routeShapeFeature.Properties.RouteShortName] = routeShapeFeature;
+            var key = routeShapeFeature.Properties.RouteShortName ?? routeShapeFeature.Properties.RouteId;
+            _routeShapeCache[key] = routeShapeFeature;
         }
     }
 }

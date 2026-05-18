@@ -10,11 +10,19 @@ namespace ChefKnifeStudios.TransitJazz.Server.TransitDataWorker;
 /// <param name="RouteId">The GTFS route identifier the vehicle is currently snapped to.</param>
 /// <param name="SpeedMetersPerSec">Vehicle speed from the GTFS-RT feed, if available.</param>
 /// <param name="Bearing">Vehicle bearing in degrees from the GTFS-RT feed, if available.</param>
+/// <param name="LastSnapDistanceKm">Haversine distance (km) from the vehicle's raw GPS to its nearest route point at the time the state was recorded. Carried for debug output only.</param>
+/// <param name="LastRawLat">Raw vehicle latitude reported by the GTFS-RT feed at the time the state was recorded. Carried for debug output only.</param>
+/// <param name="LastRawLon">Raw vehicle longitude reported by the GTFS-RT feed at the time the state was recorded. Carried for debug output only.</param>
+/// <param name="SnapIndex">Index into the route point array of the last snapped position. Used to constrain the next snap search to a window around this index.</param>
 public record VehicleState(
     double NearestLat,
     double NearestLon,
     DateTime LastUpdated,
     string RouteId,
     float? SpeedMetersPerSec,
-    float? Bearing
+    float? Bearing,
+    double LastSnapDistanceKm,
+    double LastRawLat,
+    double LastRawLon,
+    int SnapIndex
 );
