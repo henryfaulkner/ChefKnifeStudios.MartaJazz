@@ -15,25 +15,21 @@ using System.Threading.Tasks;
 
 namespace ChefKnifeStudios.TransitJazz.Client.WebApp.Pages;
 
-public partial class TransitMap : ComponentBase, IDisposable
+public partial class MapLibreTest : ComponentBase, IDisposable
 {
     [Inject] ISignalRNotificationService NotificationService { get; set; } = null!;
-    [Inject] ILogger<TransitMap> Logger { get; set; } = null!;
+    [Inject] ILogger<MapLibreTest> Logger { get; set; } = null!;
     [Inject] IGtfsEndpointsService GtfsEndpointsService { get; set; } = null!;
     [Inject] IJSRuntime JsRuntime { get; set; } = null!;
 
-    Map? _map;
+    MapLibre? _map;
     bool _mapReady;
     IEnumerable<EventEnvelope>? _pendingBatch;
-
 
     string _connectionLabel = "Connecting…";
     string _connectionCssClass = "connecting";
 
-    // vehicleId → routeId, updated on every VehiclePositionUpdatedEvent
     readonly Dictionary<string, string> _vehicleRouteMap = new();
-
-    // routeId → GeoJSON string (client-side cache, lives for page lifetime)
     readonly Dictionary<string, RouteShapeFeature> _routeShapeCache = new();
 
     static CameraOptions DefaultCameraOptions
@@ -52,7 +48,7 @@ public partial class TransitMap : ComponentBase, IDisposable
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "TransitMap: Failed to connect to SignalR hub");
+            Logger.LogError(ex, "MapLibreTest: Failed to connect to SignalR hub");
             _connectionLabel = "Disconnected";
             _connectionCssClass = "disconnected";
         }
@@ -63,20 +59,20 @@ public partial class TransitMap : ComponentBase, IDisposable
         NotificationService.NotificationReceived -= HandleVehicleBatchAsync;
     }
 
-    async Task OnMapReadyAsync(Map map)
+    async Task OnMapReadyAsync(MapLibre map)
     {
         _map = map;
         _mapReady = true;
 
-        await JsRuntime.InvokeVoidAsync("ChefPerfObserver.start", "baseline");
+        await JsRuntime.InvokeVoidAsync("ChefPerfObserver.start", "poc");
 
-        Logger.LogDebug("TransitMap: pushing {Count} route geometries to animator and map layer", _routeShapeCache.Count);
+        Logger.LogDebug("MapLibreTest: pushing {Count} route geometries to animator and map layer", _routeShapeCache.Count);
         foreach (var (routeId, feature) in _routeShapeCache)
         {
             await _map.AddRouteShapeFeatureAsync(routeId, feature.Geometry.Coordinates, feature.Properties.Color);
             await _map.LoadRouteGeometryForAnimationAsync(routeId, feature.Geometry.Coordinates);
         }
-        Logger.LogDebug("TransitMap: route geometry push complete");
+        Logger.LogDebug("MapLibreTest: route geometry push complete");
 
         if (_pendingBatch is not null)
         {
@@ -94,14 +90,13 @@ public partial class TransitMap : ComponentBase, IDisposable
             return;
         }
 
-        // Handle RouteNearestPointBatchEvent — animated path-following
         var nearestPointRecords = batch
             .Where(x => x.Payload is RouteNearestPointBatchEvent)
             .Select(x => (RouteNearestPointBatchEvent)x.Payload)
             .SelectMany(e => e.BatchRecords)
             .ToArray();
 
-        Logger.LogDebug("TransitMap: batch contains {NearestCount} nearest-point records, {PosCount} position events",
+        Logger.LogDebug("MapLibreTest: batch contains {NearestCount} nearest-point records, {PosCount} position events",
             nearestPointRecords.Length,
             batch.Count(x => x.Payload is VehiclePositionUpdatedEvent));
 
@@ -120,12 +115,10 @@ public partial class TransitMap : ComponentBase, IDisposable
                 bearing = r.Bearing
             }).ToArray();
 
-            Logger.LogDebug("TransitMap: forwarding {Count} nearest-point records to animator", records.Length);
+            Logger.LogDebug("MapLibreTest: forwarding {Count} nearest-point records to animator", records.Length);
             await _map.ProcessNearestPointBatchAsync(records);
         }
 
-        // V1 fallback: only plot raw positions when no nearest-point events arrived this batch.
-        // If the animator is active, PlotVehiclesAsync clears the datasource and wipes animator-managed features.
         if (nearestPointRecords.Length == 0)
         {
             var payloadBatch = batch
@@ -159,7 +152,7 @@ public partial class TransitMap : ComponentBase, IDisposable
                 if (payload.Position is null) continue;
                 if (float.IsNaN(payload.Position.Latitude) || float.IsNaN(payload.Position.Longitude))
                 {
-                    Logger.LogDebug("TransitMap: Skipping vehicle {VehicleId} — invalid coordinates", payload.Vehicle.Id);
+                    Logger.LogDebug("MapLibreTest: Skipping vehicle {VehicleId} — invalid coordinates", payload.Vehicle.Id);
                     continue;
                 }
 
@@ -167,20 +160,22 @@ public partial class TransitMap : ComponentBase, IDisposable
                     _vehicleRouteMap[payload.Vehicle.Id] = routeId;
             }
 
-            Logger.LogDebug("TransitMap: no nearest-point records, falling back to V1 plot");
+            Logger.LogDebug("MapLibreTest: no nearest-point records, falling back to V1 plot");
             await _map.PlotVehiclesAsync(featureCollection, true);
         }
 
         await InvokeAsync(StateHasChanged);
     }
 
-    async Task OnVehicleMarkerClickedAsync((Map Map, string VehicleId) args)
+    async Task OnVehicleMarkerClickedAsync((MapLibre Map, string VehicleId) args)
     {
+        Console.WriteLine($"[MapLibreTest] Vehicle marker clicked: {args.VehicleId}");
         return;
     }
 
-    async Task OnMapBodyClickedAsync(Map map)
+    async Task OnMapBodyClickedAsync(MapLibre map)
     {
+        Console.WriteLine("[MapLibreTest] Map body clicked");
         return;
     }
 
@@ -189,7 +184,7 @@ public partial class TransitMap : ComponentBase, IDisposable
         var res = await GtfsEndpointsService.GetAllRouteShapes(ct);
         if (!res.IsSuccess)
         {
-            Logger.LogError("Unable to pull route data.");
+            Logger.LogError("MapLibreTest: Unable to pull route data.");
             return;
         }
 

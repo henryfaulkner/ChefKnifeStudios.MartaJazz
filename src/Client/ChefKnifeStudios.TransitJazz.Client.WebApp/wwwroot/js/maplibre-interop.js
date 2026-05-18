@@ -1,0 +1,196 @@
+window.ChefMapLibre = {
+    maps: {},
+
+    createMap: async function (containerDivId, dotNetRef) {
+        let settings = await dotNetRef.invokeMethodAsync('getMapSettings');
+
+        let map = new maplibregl.Map({
+            container: containerDivId,
+            style: settings.styleUrl,
+            center: settings.center,
+            zoom: settings.zoom
+        });
+
+        ChefMapLibre.maps[containerDivId] = map;
+
+        map.on('load', function () {
+            // Vehicles GeoJSON source + circle layer — must exist before the animator calls getSource('vehicles')
+            map.addSource('vehicles', {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] }
+            });
+
+            map.addLayer({
+                id: 'vehicles-layer',
+                type: 'circle',
+                source: 'vehicles',
+                paint: {
+                    'circle-radius': 6,
+                    'circle-color': '#22c55e',
+                    'circle-stroke-width': 1,
+                    'circle-stroke-color': '#fff'
+                }
+            });
+
+            // Vehicle click → BusMarkerClickedAsync
+            map.on('click', 'vehicles-layer', function (e) {
+                if (e.features && e.features.length > 0) {
+                    let vehicleId = e.features[0].properties.vehicleId;
+                    dotNetRef.invokeMethodAsync('BusMarkerClickedAsync', String(vehicleId));
+                }
+            });
+
+            map.on('mouseenter', 'vehicles-layer', function () {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+
+            map.on('mouseleave', 'vehicles-layer', function () {
+                map.getCanvas().style.cursor = '';
+            });
+
+            // Empty-area click → mapBodyClickedAsync
+            map.on('click', function (e) {
+                let features = map.queryRenderedFeatures(e.point, { layers: ['vehicles-layer'] });
+                if (!features || features.length === 0) {
+                    dotNetRef.invokeMethodAsync('mapBodyClickedAsync');
+                }
+            });
+
+            let containerDiv = document.getElementById(containerDivId);
+            if (containerDiv) {
+                dotNetRef.invokeMethodAsync('notifyMapReadyAsync');
+            }
+        });
+    },
+
+    setMapZoom: function (containerDivId, zoom) {
+        let map = ChefMapLibre.maps[containerDivId];
+        if (!map) return;
+        map.setZoom(zoom);
+    },
+
+    toggleTraffic: function (containerDivId, on) {
+        console.info('[ChefMapLibre] toggleTraffic: traffic layer not implemented for POC (no-op)');
+    },
+
+    setMapStyle: function (containerDivId, styleName) {
+        console.info('[ChefMapLibre] setMapStyle: style switching not implemented for POC (no-op)');
+    },
+
+    centerVehiclePin: function (containerDivId, vehicleId) {
+        let map = ChefMapLibre.maps[containerDivId];
+        if (!map) return;
+
+        let state = ChefMapLibreAnimator.vehicles[vehicleId];
+        if (state && state.currentPos) {
+            map.easeTo({ center: state.currentPos });
+        }
+    },
+
+    plotFeatures: function (containerDivId, sourceId, featureCollection, centerMap) {
+        let map = ChefMapLibre.maps[containerDivId];
+        if (!map) return;
+
+        let source = map.getSource(sourceId);
+        if (!source) {
+            map.addSource(sourceId, { type: 'geojson', data: featureCollection });
+            map.addLayer({
+                id: sourceId + '-layer',
+                type: 'circle',
+                source: sourceId,
+                paint: { 'circle-radius': 6, 'circle-color': '#22c55e' }
+            });
+            return;
+        }
+
+        source.setData(featureCollection);
+
+        if (centerMap && featureCollection.features && featureCollection.features.length > 0) {
+            try {
+                let coords = featureCollection.features
+                    .filter(f => f.geometry && f.geometry.type === 'Point')
+                    .slice(0, 20)
+                    .map(f => f.geometry.coordinates);
+
+                if (coords.length > 0) {
+                    let bounds = coords.reduce(function (b, c) {
+                        return b.extend(c);
+                    }, new maplibregl.LngLatBounds(coords[0], coords[0]));
+                    map.fitBounds(bounds, { padding: 40, maxZoom: 14 });
+                }
+            } catch (e) { }
+        }
+    },
+
+    showRouteShape: function (containerDivId, geoJson) {
+        let map = ChefMapLibre.maps[containerDivId];
+        if (!map) return;
+
+        try {
+            let feature = typeof geoJson === 'string' ? JSON.parse(geoJson) : geoJson;
+            let source = map.getSource('route-shape-legacy');
+            if (!source) {
+                map.addSource('route-shape-legacy', { type: 'geojson', data: feature });
+                map.addLayer({
+                    id: 'route-shape-legacy-layer',
+                    type: 'line',
+                    source: 'route-shape-legacy',
+                    paint: { 'line-color': '#0078D4', 'line-width': 4 }
+                });
+            } else {
+                source.setData(feature);
+            }
+        } catch (err) {
+            console.warn('[ChefMapLibre] showRouteShape: failed to parse GeoJSON', err);
+        }
+    },
+
+    clearRouteShape: function (containerDivId) {
+        let map = ChefMapLibre.maps[containerDivId];
+        if (!map) return;
+
+        let style = map.getStyle();
+        if (!style) return;
+
+        (style.layers || []).forEach(function (layer) {
+            if (layer.id && (layer.id.startsWith('route-layer-') || layer.id === 'route-shape-legacy-layer')) {
+                if (map.getLayer(layer.id)) map.removeLayer(layer.id);
+            }
+        });
+
+        Object.keys(style.sources || {}).forEach(function (sourceId) {
+            if (sourceId.startsWith('route-') || sourceId === 'route-shape-legacy') {
+                if (map.getSource(sourceId)) map.removeSource(sourceId);
+            }
+        });
+    },
+
+    addRouteShapeFeature: function (containerDivId, routeId, coordinates, color) {
+        let map = ChefMapLibre.maps[containerDivId];
+        if (!map) return;
+
+        let sourceId = 'route-' + routeId;
+        let layerId = 'route-layer-' + routeId;
+        let lineColor = color || '#0078D4';
+
+        let geojson = {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coordinates },
+            properties: { routeId: routeId, color: lineColor }
+        };
+
+        let source = map.getSource(sourceId);
+        if (source) {
+            source.setData(geojson);
+        } else {
+            map.addSource(sourceId, { type: 'geojson', data: geojson });
+            map.addLayer({
+                id: layerId,
+                type: 'line',
+                source: sourceId,
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': lineColor, 'line-width': 4, 'line-opacity': 0.85 }
+            }, 'vehicles-layer');
+        }
+    }
+};
