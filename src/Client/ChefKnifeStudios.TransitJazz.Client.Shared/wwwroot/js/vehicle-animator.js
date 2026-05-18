@@ -7,6 +7,9 @@ window.ChefMapAnimator = {
     _running: false,
     _lastFrameLogTime: 0,
 
+    HISTORY_SIZE: 4,
+    MAX_EXTRAPOLATION_MS: 30000,
+
     _log: function (level, msg, data) {
         if (data !== undefined) {
             console[level]('[ChefMapAnimator] ' + msg, data);
@@ -85,20 +88,50 @@ window.ChefMapAnimator = {
         return [lon, lat];
     },
 
-    extrapolateAlongRoute: function (state, elapsedMs) {
-        if (!state.speed || state.speed <= 0) return state.endPos;
+    // Empirical speed from the history ring buffer: total polyline distance / total time.
+    // Falls back to the GTFS-RT speed field, then to 0.
+    computeEmpiricalSpeed: function (state) {
+        var hist = state.history;
+        if (!hist || hist.length < 2) return state.speed || 0;
 
         var routeData = this.routeGeometry[state.routeId];
-        if (!routeData) return state.endPos;
+        if (!routeData) {
+            // No polyline — fall back to straight-line distance through history.
+            var firstSL = hist[0];
+            var lastSL = hist[hist.length - 1];
+            var dtSL = (lastSL.timeMs - firstSL.timeMs) / 1000;
+            if (dtSL <= 0) return state.speed || 0;
+            return this.haversineMeters(firstSL.pos, lastSL.pos) / dtSL;
+        }
 
-        var extraDist = state.speed * (elapsedMs / 1000);
-        var maxExtraDist = state.speed * 5;
-        var clampedDist = Math.min(extraDist, maxExtraDist);
+        var totalDist = 0;
+        for (var i = 1; i < hist.length; i++) {
+            var idxA = this.findNearestIndex(routeData.coords, hist[i - 1].pos);
+            var idxB = this.findNearestIndex(routeData.coords, hist[i].pos);
+            var lo = Math.min(idxA, idxB);
+            var hi = Math.max(idxA, idxB);
+            totalDist += routeData.cumDist[hi] - routeData.cumDist[lo];
+        }
 
-        var endIdx = this.findNearestIndex(routeData.coords, state.endPos);
+        var dtSec = (hist[hist.length - 1].timeMs - hist[0].timeMs) / 1000;
+        if (dtSec <= 0) return state.speed || 0;
 
-        var remaining = clampedDist;
-        for (var i = endIdx; i < routeData.coords.length - 1; i++) {
+        return totalDist / dtSec;
+    },
+
+    extrapolateAlongRoute: function (state, elapsedMs) {
+        var routeData = this.routeGeometry[state.routeId];
+        if (!routeData) return state.currentPos;
+
+        var speed = state.empiricalSpeed != null ? state.empiricalSpeed : (state.speed || 0);
+        if (speed <= 0) return state.currentPos;
+
+        var extraDist = speed * (elapsedMs / 1000);
+
+        var startIdx = this.findNearestIndex(routeData.coords, state.extrapolateFromPos || state.endPos);
+
+        var remaining = extraDist;
+        for (var i = startIdx; i < routeData.coords.length - 1; i++) {
             var segDist = routeData.cumDist[i + 1] - routeData.cumDist[i];
             if (remaining <= segDist) {
                 var frac = remaining / segDist;
@@ -172,15 +205,17 @@ window.ChefMapAnimator = {
 
                     if (t >= 1.0) {
                         state.endPos = newPos;
-                        var nextPhase = state.speed ? 'extrapolating' : 'idle';
+                        var hasSpeed = (state.empiricalSpeed > 0) || (state.speed > 0);
+                        var nextPhase = hasSpeed ? 'extrapolating' : 'idle';
                         this._log('debug', 'vehicle ' + state.vehicleId + ': interpolation complete → ' + nextPhase);
                         state.phase = nextPhase;
                         state.startTime = now;
+                        state.extrapolateFromPos = newPos;
                     }
                 } else if (state.phase === 'extrapolating') {
                     extrapolatingCount++;
                     newPos = this.extrapolateAlongRoute(state, elapsed);
-                    if (elapsed > 30000) {
+                    if (elapsed > this.MAX_EXTRAPOLATION_MS) {
                         this._log('debug', 'vehicle ' + state.vehicleId + ': extrapolation timeout → idle');
                         state.phase = 'idle';
                     }
@@ -245,6 +280,9 @@ window.ChefMapAnimator = {
         var teleportedVehicles = 0;
         var fallbackLerpVehicles = 0;
 
+        var staleVehicles = 0;
+        var unchangedMovingVehicles = 0;
+
         for (var i = 0; i < records.length; i++) {
             var rec = records[i];
             var existingState = this.vehicles[rec.vehicleId];
@@ -256,8 +294,53 @@ window.ChefMapAnimator = {
                 existingState = null;
             }
 
+            // Stale upstream sample: GTFS-RT delivered the same per-vehicle timestamp.
+            // Don't pollute history or rebuild subPath — just re-anchor the extrapolator
+            // to the bus's current rendered position and keep using empirical speed.
+            // If we have no prior state, ignore the stale record entirely (we'd be
+            // creating a vehicle with no real motion data).
+            if (rec.isStale && existingState) {
+                staleVehicles++;
+                existingState.startTime = now;
+                existingState.extrapolateFromPos = existingState.currentPos;
+                // Preserve phase if already extrapolating; otherwise promote to
+                // extrapolating when we have a usable empirical speed.
+                if (existingState.phase !== 'extrapolating' && existingState.empiricalSpeed > 0) {
+                    existingState.phase = 'extrapolating';
+                }
+                continue;
+            }
+            if (rec.isStale && !existingState) {
+                staleVehicles++;
+                continue;
+            }
+
+            // "Unchanged" outcome: a fresh report whose snap point matches the prior
+            // snap but speed > 0. The bus is moving, just didn't cross a polyline
+            // vertex boundary this cycle. Treat like Stale for the animator: keep
+            // extrapolating from current rendered position, but do NOT push the
+            // duplicate snap into history (would falsely teach empirical speed that
+            // the bus traveled 0m in 10s and drag it toward zero).
+            // Stationary (speed == 0, same snap) falls through to the normal path
+            // so the zero-speed sample correctly enters history and idles the bus.
+            var isUnchangedMoving = existingState
+                && rec.priorLat === rec.currentLat
+                && rec.priorLon === rec.currentLon
+                && (rec.speed || 0) > 0;
+
+            if (isUnchangedMoving) {
+                unchangedMovingVehicles++;
+                existingState.startTime = now;
+                existingState.extrapolateFromPos = existingState.currentPos;
+                if (existingState.phase !== 'extrapolating' && existingState.empiricalSpeed > 0) {
+                    existingState.phase = 'extrapolating';
+                }
+                continue;
+            }
+
             var routeData = this.routeGeometry[rec.routeId];
             var subPath, subPathCumDist, totalDistance;
+            var duration = rec.durationMs || 10000;
 
             if (routeData) {
                 var startIdx = this.findNearestIndex(routeData.coords, [rec.priorLon, rec.priorLat]);
@@ -276,6 +359,16 @@ window.ChefMapAnimator = {
 
             var startPos = existingState ? existingState.currentPos : [rec.priorLon, rec.priorLat];
 
+            // Update ring-buffer history of recent snap points. Stored as
+            // { pos: [lon, lat], timeMs: clientArrivalTime } — we use client time so
+            // empirical speed accounts for actual rendering cadence, not server jitter.
+            var history = (existingState && existingState.history) ? existingState.history.slice() : [];
+            if (history.length === 0) {
+                history.push({ pos: [rec.priorLon, rec.priorLat], timeMs: now - duration });
+            }
+            history.push({ pos: [rec.currentLon, rec.currentLat], timeMs: now });
+            while (history.length > this.HISTORY_SIZE) history.shift();
+
             // Smooth handoff: if mid-animation, start from current rendered position
             if (existingState && existingState.phase !== 'idle' && subPath.length > 1) {
                 this._log('debug', 'vehicle ' + rec.vehicleId + ': mid-animation handoff from ' + JSON.stringify(startPos));
@@ -284,8 +377,36 @@ window.ChefMapAnimator = {
                 totalDistance = subPathCumDist[subPathCumDist.length - 1];
             }
 
-            var phase = totalDistance > 0 ? 'interpolating' : 'idle';
-            this._log('debug', 'vehicle ' + rec.vehicleId + ': ' + phase + ', dist=' + Math.round(totalDistance) + 'm, duration=' + Math.round(rec.durationMs || 10000) + 'ms, waypoints=' + subPath.length);
+            // Compute empirical speed from history. This is more stable than the
+            // GTFS-RT speed field and lets us extrapolate forward smoothly even on
+            // "unchanged snap" batches.
+            var tempState = {
+                routeId: rec.routeId,
+                speed: rec.speed || 0,
+                history: history
+            };
+            var empiricalSpeed = this.computeEmpiricalSpeed(tempState);
+
+            // Phase selection. With a usable speed signal we prefer extrapolation:
+            // the snapped subPath can drift faster than reality, so trust speed *
+            // wallclock when we have it. Interpolation kicks in only when we have a
+            // real subPath but no speed (early-life, stopped vehicle reporting null).
+            var hasSpeed = empiricalSpeed > 0;
+            var phase;
+            if (hasSpeed) {
+                phase = 'extrapolating';
+            } else if (totalDistance > 0) {
+                phase = 'interpolating';
+            } else {
+                phase = 'idle';
+            }
+
+            this._log('debug', 'vehicle ' + rec.vehicleId + ': ' + phase
+                + ', subPathDist=' + Math.round(totalDistance) + 'm'
+                + ', duration=' + Math.round(duration) + 'ms'
+                + ', empSpeed=' + empiricalSpeed.toFixed(2) + 'm/s'
+                + ', gtfsSpeed=' + (rec.speed || 0).toFixed(2) + 'm/s'
+                + ', histLen=' + history.length);
 
             if (!existingState) {
                 newVehicles++;
@@ -300,11 +421,14 @@ window.ChefMapAnimator = {
                 subPathCumDist: subPathCumDist,
                 totalDistance: totalDistance,
                 startTime: now,
-                duration: rec.durationMs || 10000,
+                duration: duration,
                 speed: rec.speed || null,
+                empiricalSpeed: empiricalSpeed,
                 bearing: rec.bearing || null,
                 currentPos: startPos,
                 endPos: subPath[subPath.length - 1],
+                extrapolateFromPos: startPos,
+                history: history,
                 phase: phase
             };
         }
@@ -314,6 +438,8 @@ window.ChefMapAnimator = {
             newVehicles: newVehicles,
             updated: updatedVehicles,
             teleported: teleportedVehicles,
+            stale: staleVehicles,
+            unchangedMoving: unchangedMovingVehicles,
             fallbackLerp: fallbackLerpVehicles
         });
     }

@@ -14,6 +14,7 @@ namespace ChefKnifeStudios.TransitJazz.Server.TransitDataWorker;
 /// <param name="LastRawLat">Raw vehicle latitude reported by the GTFS-RT feed at the time the state was recorded. Carried for debug output only.</param>
 /// <param name="LastRawLon">Raw vehicle longitude reported by the GTFS-RT feed at the time the state was recorded. Carried for debug output only.</param>
 /// <param name="SnapIndex">Index into the route point array of the last snapped position. Used to constrain the next snap search to a window around this index.</param>
+/// <param name="VehicleTimestamp">GTFS-RT per-vehicle sample timestamp (Unix seconds). Used to detect when the upstream feed delivered the same GPS sample on consecutive polls.</param>
 public record VehicleState(
     double NearestLat,
     double NearestLon,
@@ -24,5 +25,6 @@ public record VehicleState(
     double LastSnapDistanceKm,
     double LastRawLat,
     double LastRawLon,
-    int SnapIndex
+    int SnapIndex,
+    ulong? VehicleTimestamp
 );

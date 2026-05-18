@@ -15,6 +15,7 @@ public class Worker(
 {
     readonly ConcurrentDictionary<string, VehiclePositionBatchEvent.VehiclePositionRecord> _lastUpdateCache = new();
     readonly ConcurrentDictionary<string, VehicleState> _vehicleStates = new();
+    ulong? _lastFeedHeaderTimestamp;
     readonly string _gtfsRtUrl = "https://gtfs-rt.itsmarta.com/TMGTFSRealTimeWebService/vehicle/vehiclepositions.pb";
     readonly string _batchOutputDir = Path.Combine(AppContext.BaseDirectory, "event-batches");
     static readonly JsonSerializerOptions _batchJsonOptions = new() { WriteIndented = true };
@@ -132,7 +133,7 @@ public class Worker(
 
             var batch = new List<RouteNearestPointBatchEvent.RouteNearestPointRecord>();
             var debugBatch = new List<BatchDebugRecord>();
-            int movedCount = 0, unchangedCount = 0, skippedNoRouteId = 0, skippedUnknownRoute = 0;
+            int movedCount = 0, unchangedCount = 0, stationaryCount = 0, staleCount = 0, skippedNoRouteId = 0, skippedUnknownRoute = 0;
 
             foreach (var entity in feed.Entities)
             {
@@ -171,12 +172,24 @@ public class Worker(
                     string outcome;
                     BatchDebugRecord debugRecord;
 
+                    var currentVehicleTimestamp = entity.Vehicle.Timestamp;
+                    bool isStale = false;
+
                     if (_vehicleStates.TryGetValue(vehicleId, out var prior))
                     {
                         if (prior.LastUpdated > now)
                         {
                             continue;
                         }
+
+                        // Staleness check: the upstream GTFS-RT feed delivered the same
+                        // per-vehicle sample as last poll. Emit a passthrough record so
+                        // the client keeps extrapolating, but do not update _vehicleStates —
+                        // we want the *next* fresh sample to compute its prior-delta against
+                        // the last truly-new observation, not against this stale one.
+                        isStale = currentVehicleTimestamp.HasValue
+                            && prior.VehicleTimestamp.HasValue
+                            && currentVehicleTimestamp.Value == prior.VehicleTimestamp.Value;
 
                         batch.Add(new RouteNearestPointBatchEvent.RouteNearestPointRecord(
                             vehicleId,
@@ -188,13 +201,24 @@ public class Worker(
                             nearest.Lon,
                             now,
                             entity.Vehicle.Position.Speed,
-                            entity.Vehicle.Position.Bearing
+                            entity.Vehicle.Position.Bearing,
+                            isStale
                         ));
 
-                        if (prior.NearestLat != nearest.Lat || prior.NearestLon != nearest.Lon)
+                        if (isStale)
+                        {
+                            outcome = "Stale";
+                            staleCount++;
+                        }
+                        else if (prior.NearestLat != nearest.Lat || prior.NearestLon != nearest.Lon)
                         {
                             outcome = "Moved";
                             movedCount++;
+                        }
+                        else if ((entity.Vehicle.Position.Speed ?? 0f) == 0f)
+                        {
+                            outcome = "Stationary";
+                            stationaryCount++;
                         }
                         else
                         {
@@ -240,7 +264,8 @@ public class Worker(
                             nearest.Lon,
                             now,
                             entity.Vehicle.Position.Speed,
-                            entity.Vehicle.Position.Bearing
+                            entity.Vehicle.Position.Bearing,
+                            false
                         ));
                         outcome = "FirstObservation";
                         movedCount++;
@@ -274,17 +299,23 @@ public class Worker(
 
                     debugBatch.Add(debugRecord);
 
-                    _vehicleStates[vehicleId] = new VehicleState(
-                        nearest.Lat,
-                        nearest.Lon,
-                        now,
-                        nearest.RouteId,
-                        entity.Vehicle.Position.Speed,
-                        entity.Vehicle.Position.Bearing,
-                        snapValue.DistanceKm,
-                        lat,
-                        lon,
-                        snapValue.Index);
+                    // Skip _vehicleStates update for stale samples so the next fresh
+                    // observation deltas against the last real data, not against a duplicate.
+                    if (!isStale)
+                    {
+                        _vehicleStates[vehicleId] = new VehicleState(
+                            nearest.Lat,
+                            nearest.Lon,
+                            now,
+                            nearest.RouteId,
+                            entity.Vehicle.Position.Speed,
+                            entity.Vehicle.Position.Bearing,
+                            snapValue.DistanceKm,
+                            lat,
+                            lon,
+                            snapValue.Index,
+                            currentVehicleTimestamp);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -292,9 +323,13 @@ public class Worker(
                 }
             }
 
+            var feedTs = feed.Header?.Timestamp;
+            var feedIsDuplicate = feedTs.HasValue && _lastFeedHeaderTimestamp.HasValue && feedTs.Value == _lastFeedHeaderTimestamp.Value;
+            _lastFeedHeaderTimestamp = feedTs;
+
             logger.LogInformation(
-                "Spatial reconciliation: {Moved} moved, {Unchanged} unchanged, {SkippedNoRouteId} skippedNoRouteId, {SkippedUnknownRoute} skippedUnknownRoute.",
-                movedCount, unchangedCount, skippedNoRouteId, skippedUnknownRoute);
+                "Spatial reconciliation: {Moved} moved, {Unchanged} unchanged, {Stationary} stationary, {Stale} stale, {SkippedNoRouteId} skippedNoRouteId, {SkippedUnknownRoute} skippedUnknownRoute. FeedHeaderTs={FeedHeaderTs} DuplicateFeed={DuplicateFeed}",
+                movedCount, unchangedCount, stationaryCount, staleCount, skippedNoRouteId, skippedUnknownRoute, feedTs, feedIsDuplicate);
 
             if (batch.Count > 0)
             {

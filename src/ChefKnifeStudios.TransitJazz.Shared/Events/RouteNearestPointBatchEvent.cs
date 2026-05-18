@@ -25,6 +25,7 @@ public sealed record RouteNearestPointBatchEvent(
     /// <param name="CurrentUtcNow">UTC timestamp of this observation.</param>
     /// <param name="SpeedMetersPerSec">Vehicle speed from the GTFS-RT feed, if available.</param>
     /// <param name="Bearing">Vehicle bearing in degrees (0-360) from the GTFS-RT feed, if available.</param>
+    /// <param name="IsStale">True when this record reflects an upstream GTFS-RT sample whose per-vehicle timestamp matches the prior observation — i.e. the feed delivered the same GPS reading twice. Clients should keep extrapolating from the last empirical speed but should NOT append this snap to their motion history.</param>
     public sealed record RouteNearestPointRecord(
         string VehicleId,
         string RouteId,
@@ -35,6 +36,7 @@ public sealed record RouteNearestPointBatchEvent(
         double CurrentNearestLon,
         DateTime CurrentUtcNow,
         float? SpeedMetersPerSec,
-        float? Bearing
+        float? Bearing,
+        bool IsStale
     );
 }

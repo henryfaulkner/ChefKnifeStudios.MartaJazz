@@ -113,7 +113,8 @@ public partial class TransitMap : ComponentBase, IDisposable
                 currentLat = r.CurrentNearestLat,
                 durationMs = (r.CurrentUtcNow - r.PriorUtcNow).TotalMilliseconds,
                 speed = r.SpeedMetersPerSec,
-                bearing = r.Bearing
+                bearing = r.Bearing,
+                isStale = r.IsStale
             }).ToArray();
 
             Logger.LogDebug("TransitMap: forwarding {Count} nearest-point records to animator", records.Length);
