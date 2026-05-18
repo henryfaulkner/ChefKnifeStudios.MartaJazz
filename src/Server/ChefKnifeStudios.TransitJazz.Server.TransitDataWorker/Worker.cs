@@ -16,6 +16,8 @@ public class Worker(
     readonly ConcurrentDictionary<string, VehiclePositionBatchEvent.VehiclePositionRecord> _lastUpdateCache = new();
     readonly ConcurrentDictionary<string, VehicleState> _vehicleStates = new();
     readonly string _gtfsRtUrl = "https://gtfs-rt.itsmarta.com/TMGTFSRealTimeWebService/vehicle/vehiclepositions.pb";
+    readonly string _batchOutputDir = Path.Combine(AppContext.BaseDirectory, "event-batches");
+    static readonly JsonSerializerOptions _batchJsonOptions = new() { WriteIndented = true };
 
     IReadOnlyDictionary<string, RoutePoint[]>? _routeIndex;
 
@@ -227,6 +229,8 @@ public class Worker(
 
             if (batch.Count > 0)
             {
+                await WriteBatchToDiskAsync(batch, ct);
+
                 var envelope = new EventEnvelope(
                     nameof(RouteNearestPointBatchEvent),
                     DateTimeOffset.UtcNow,
@@ -385,6 +389,25 @@ public class Worker(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error processing GTFS-RT feed.");
+        }
+    }
+
+    async Task WriteBatchToDiskAsync(List<RouteNearestPointBatchEvent.RouteNearestPointRecord> batch, CancellationToken ct)
+    {
+        try
+        {
+            Directory.CreateDirectory(_batchOutputDir);
+            var fileName = $"route-nearest-point-batch_{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}.json";
+            var filePath = Path.Combine(_batchOutputDir, fileName);
+
+            await using var stream = File.Create(filePath);
+            await JsonSerializer.SerializeAsync(stream, batch, _batchJsonOptions, ct);
+
+            logger.LogInformation("Wrote spatial reconciliation batch to {FilePath} ({Count} records).", filePath, batch.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to write spatial reconciliation batch to disk.");
         }
     }
 

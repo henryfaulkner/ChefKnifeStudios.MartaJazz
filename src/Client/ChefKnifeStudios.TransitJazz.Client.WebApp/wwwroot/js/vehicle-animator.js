@@ -1,11 +1,10 @@
 window.ChefMapAnimator = {
     vehicles: {},
     routeGeometry: {},
-    _datasource: null,
+    _source: null,
+    _map: null,
     _animFrameId: null,
     _running: false,
-
-    // Throttled frame logging: log once per second
     _lastFrameLogTime: 0,
 
     _log: function (level, msg, data) {
@@ -15,6 +14,8 @@ window.ChefMapAnimator = {
             console[level]('[ChefMapAnimator] ' + msg);
         }
     },
+
+    // --- Provider-agnostic math (verbatim from vehicle-animator.js) ---
 
     haversineMeters: function (p1, p2) {
         var R = 6371000;
@@ -53,7 +54,6 @@ window.ChefMapAnimator = {
         if (startIdx <= endIdx) {
             return routeCoords.slice(startIdx, endIdx + 1);
         }
-        // Looping route: wrap around
         this._log('debug', 'extractSubPath: wrap-around detected', { startIdx: startIdx, endIdx: endIdx, routeLength: routeCoords.length });
         return routeCoords.slice(startIdx).concat(routeCoords.slice(0, endIdx + 1));
     },
@@ -112,77 +112,10 @@ window.ChefMapAnimator = {
         return routeData.coords[routeData.coords.length - 1];
     },
 
-    tick: function (now) {
-        if (!this._running) return;
-
-        var ds = this._datasource;
-        if (!ds) {
-            this._log('warn', 'tick: datasource not set, skipping frame');
-            this._animFrameId = requestAnimationFrame(this.tick.bind(this));
-            return;
-        }
-
-        var vehicleIds = Object.keys(this.vehicles);
-        var activeCount = 0;
-        var extrapolatingCount = 0;
-        var idleCount = 0;
-        var missingShapeCount = 0;
-
-        for (var i = 0; i < vehicleIds.length; i++) {
-            var state = this.vehicles[vehicleIds[i]];
-            if (!state || state.phase === 'idle') {
-                idleCount++;
-                continue;
-            }
-
-            activeCount++;
-            var elapsed = now - state.startTime;
-            var newPos = null;
-
-            if (state.phase === 'interpolating') {
-                var t = Math.min(elapsed / state.duration, 1.0);
-                newPos = this.interpolateAlongPath(state.subPath, state.subPathCumDist, t);
-
-                if (t >= 1.0) {
-                    state.endPos = newPos;
-                    var nextPhase = state.speed ? 'extrapolating' : 'idle';
-                    this._log('debug', 'vehicle ' + state.vehicleId + ': interpolation complete → ' + nextPhase);
-                    state.phase = nextPhase;
-                    state.startTime = now;
-                }
-            } else if (state.phase === 'extrapolating') {
-                extrapolatingCount++;
-                newPos = this.extrapolateAlongRoute(state, elapsed);
-                if (elapsed > 30000) {
-                    this._log('debug', 'vehicle ' + state.vehicleId + ': extrapolation timeout → idle');
-                    state.phase = 'idle';
-                }
-            }
-
-            if (newPos && (newPos[0] !== state.currentPos[0] || newPos[1] !== state.currentPos[1])) {
-                state.currentPos = newPos;
-                var shape = ds.getShapeById('vehicle-' + state.vehicleId);
-                if (shape) {
-                    shape.setCoordinates(newPos);
-                } else {
-                    missingShapeCount++;
-                }
-            }
-        }
-
-        // Log a summary once per second to avoid flooding the console
-        if (now - this._lastFrameLogTime >= 1000) {
-            this._lastFrameLogTime = now;
-            this._log('debug', 'tick summary', {
-                total: vehicleIds.length,
-                active: activeCount,
-                extrapolating: extrapolatingCount,
-                idle: idleCount,
-                missingShapes: missingShapeCount
-            });
-        }
-
-        this._animFrameId = requestAnimationFrame(this.tick.bind(this));
+    loadRouteGeometry: function (routeId, coordinates) {
+        var cumDist = this.buildCumulativeDistances(coordinates);
+        this.routeGeometry[routeId] = { coords: coordinates, cumDist: cumDist };
+        this._log('debug', 'loadRouteGeometry: ' + routeId + ' (' + coordinates.length + ' coords, ' + Math.round(cumDist[cumDist.length - 1]) + 'm total)');
     },
 
     start: function () {
@@ -201,11 +134,90 @@ window.ChefMapAnimator = {
         }
     },
 
-    loadRouteGeometry: function (routeId, coordinates) {
-        var cumDist = this.buildCumulativeDistances(coordinates);
-        this.routeGeometry[routeId] = { coords: coordinates, cumDist: cumDist };
-        this._log('debug', 'loadRouteGeometry: ' + routeId + ' (' + coordinates.length + ' coords, ' + Math.round(cumDist[cumDist.length - 1]) + 'm total)');
+    // --- MapLibre-specific tick: builds FeatureCollection, calls setData once per frame ---
+
+    tick: function (now) {
+        if (!this._running) return;
+
+        if (!this._source) {
+            this._log('warn', 'tick: source not set, skipping frame');
+            this._animFrameId = requestAnimationFrame(this.tick.bind(this));
+            return;
+        }
+
+        var vehicleIds = Object.keys(this.vehicles);
+        var activeCount = 0;
+        var extrapolatingCount = 0;
+        var idleCount = 0;
+
+        var features = [];
+
+        for (var i = 0; i < vehicleIds.length; i++) {
+            var state = this.vehicles[vehicleIds[i]];
+            if (!state) continue;
+
+            var newPos = state.currentPos;
+
+            if (state.phase === 'idle') {
+                idleCount++;
+            } else {
+                activeCount++;
+                var elapsed = now - state.startTime;
+
+                if (state.phase === 'interpolating') {
+                    var t = Math.min(elapsed / state.duration, 1.0);
+                    var interpolated = this.interpolateAlongPath(state.subPath, state.subPathCumDist, t);
+                    if (interpolated) newPos = interpolated;
+
+                    if (t >= 1.0) {
+                        state.endPos = newPos;
+                        var nextPhase = state.speed ? 'extrapolating' : 'idle';
+                        this._log('debug', 'vehicle ' + state.vehicleId + ': interpolation complete → ' + nextPhase);
+                        state.phase = nextPhase;
+                        state.startTime = now;
+                    }
+                } else if (state.phase === 'extrapolating') {
+                    extrapolatingCount++;
+                    newPos = this.extrapolateAlongRoute(state, elapsed);
+                    if (elapsed > 30000) {
+                        this._log('debug', 'vehicle ' + state.vehicleId + ': extrapolation timeout → idle');
+                        state.phase = 'idle';
+                    }
+                }
+
+                state.currentPos = newPos;
+            }
+
+            features.push({
+                type: 'Feature',
+                id: 'vehicle-' + state.vehicleId,
+                geometry: { type: 'Point', coordinates: newPos },
+                properties: {
+                    vehicleId: state.vehicleId,
+                    pinIcon: 'stop-pin-green',
+                    routeId: state.routeId,
+                    bearing: state.bearing
+                }
+            });
+        }
+
+        // Single setData call per RAF tick — the MapLibre source update strategy (R1)
+        this._source.setData({ type: 'FeatureCollection', features: features });
+
+        if (now - this._lastFrameLogTime >= 1000) {
+            this._lastFrameLogTime = now;
+            this._log('debug', 'tick summary', {
+                total: vehicleIds.length,
+                active: activeCount,
+                extrapolating: extrapolatingCount,
+                idle: idleCount
+            });
+        }
+
+        this._animFrameId = requestAnimationFrame(this.tick.bind(this));
     },
+
+    // --- MapLibre-specific processNearestPointBatch (R4 touch points applied) ---
 
     processNearestPointBatch: function (containerDivId, records) {
         this._log('debug', 'processNearestPointBatch: received ' + records.length + ' records for map ' + containerDivId);
@@ -216,13 +228,14 @@ window.ChefMapAnimator = {
             return;
         }
 
-        var ds = map.sources.getById('vehicles');
-        if (!ds) {
-            this._log('warn', 'processNearestPointBatch: vehicles datasource not found');
+        var source = map.getSource('vehicles');
+        if (!source) {
+            this._log('warn', 'processNearestPointBatch: vehicles source not found');
             return;
         }
 
-        this._datasource = ds;
+        this._source = source;
+        this._map = map;
         if (!this._running) this.start();
 
         var now = performance.now();
@@ -273,6 +286,12 @@ window.ChefMapAnimator = {
             var phase = totalDistance > 0 ? 'interpolating' : 'idle';
             this._log('debug', 'vehicle ' + rec.vehicleId + ': ' + phase + ', dist=' + Math.round(totalDistance) + 'm, duration=' + Math.round(rec.durationMs || 10000) + 'ms, waypoints=' + subPath.length);
 
+            if (!existingState) {
+                newVehicles++;
+            } else {
+                updatedVehicles++;
+            }
+
             this.vehicles[rec.vehicleId] = {
                 vehicleId: rec.vehicleId,
                 routeId: rec.routeId,
@@ -287,25 +306,11 @@ window.ChefMapAnimator = {
                 endPos: subPath[subPath.length - 1],
                 phase: phase
             };
-
-            // Ensure feature exists in datasource
-            var shape = ds.getShapeById('vehicle-' + rec.vehicleId);
-            if (!shape) {
-                this._log('debug', 'vehicle ' + rec.vehicleId + ': creating new map feature at ' + JSON.stringify(startPos));
-                newVehicles++;
-                ds.add(new atlas.data.Feature(
-                    new atlas.data.Point(startPos),
-                    { vehicleId: rec.vehicleId, pinIcon: 'stop-pin-green' },
-                    'vehicle-' + rec.vehicleId
-                ));
-            } else {
-                updatedVehicles++;
-            }
         }
 
         this._log('info', 'processNearestPointBatch complete', {
             records: records.length,
-            newFeatures: newVehicles,
+            newVehicles: newVehicles,
             updated: updatedVehicles,
             teleported: teleportedVehicles,
             fallbackLerp: fallbackLerpVehicles

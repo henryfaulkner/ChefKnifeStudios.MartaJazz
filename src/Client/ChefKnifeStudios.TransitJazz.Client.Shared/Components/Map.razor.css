@@ -3,7 +3,7 @@
     height: calc(100vh - 2rem);
 }
 
-::deep .azure-map-copyright span, ::deep .map-copyright {
+::deep .map-copyright {
     display: none !important;
 }
 

@@ -121,7 +121,6 @@ app.MapHub<WorkerTransitHub>("/hubs/worker-transit")
     //.RequireAuthorization("TransitDataPublisher");
 
 app.MapTestEndpoints()
-    .MapMapsEndpoints()
     .MapGtfsEndpoints();
 
 app.MapDefaultEndpoints();
