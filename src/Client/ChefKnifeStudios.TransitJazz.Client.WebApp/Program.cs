@@ -46,7 +46,6 @@ builder.Services.AddSingleton<IEventNotificationService, EventNotificationServic
 builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationService>();
 
 builder.Services.AddTransient<IGtfsEndpointsService, GtfsEndpointsService>();
-builder.Services.AddTransient<IMapsEndpointsService, MapsEndpointsService>();
 
 builder.Services.AddMatBlazor();
 

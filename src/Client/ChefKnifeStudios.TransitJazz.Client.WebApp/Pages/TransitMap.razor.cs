@@ -6,7 +6,6 @@ using ChefKnifeStudios.TransitJazz.Shared.Events;
 using ChefKnifeStudios.TransitJazz.Shared.GtfsData;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
-using Microsoft.JSInterop;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,7 +19,6 @@ public partial class TransitMap : ComponentBase, IDisposable
     [Inject] ISignalRNotificationService NotificationService { get; set; } = null!;
     [Inject] ILogger<TransitMap> Logger { get; set; } = null!;
     [Inject] IGtfsEndpointsService GtfsEndpointsService { get; set; } = null!;
-    [Inject] IJSRuntime JsRuntime { get; set; } = null!;
 
     Map? _map;
     bool _mapReady;
@@ -67,8 +65,6 @@ public partial class TransitMap : ComponentBase, IDisposable
     {
         _map = map;
         _mapReady = true;
-
-        await JsRuntime.InvokeVoidAsync("ChefPerfObserver.start", "baseline");
 
         Logger.LogDebug("TransitMap: pushing {Count} route geometries to animator and map layer", _routeShapeCache.Count);
         foreach (var (routeId, feature) in _routeShapeCache)

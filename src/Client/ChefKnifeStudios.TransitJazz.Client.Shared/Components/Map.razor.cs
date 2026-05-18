@@ -1,4 +1,4 @@
-﻿using ChefKnifeStudios.TransitJazz.Client.Shared.Models;
+using ChefKnifeStudios.TransitJazz.Client.Shared.Models;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.JSInterop;
@@ -11,14 +11,14 @@ namespace ChefKnifeStudios.TransitJazz.Client.Shared.Components;
 public partial class Map : ComponentBase
 {
     public string ElementId { get; } = $"cks-map-{Guid.NewGuid()}".ToLower();
-    bool _showTraffic;
-    
-    //[Inject] public IAccessTokenProvider AccessTokenProvider { get; set; } = null!;
+
     [Inject] public IJSRuntime JsRuntime { get; set; } = null!;
     [Inject] public IConfiguration Configuration { get; set; } = null!;
+
     [Parameter]
     public CameraOptions CameraOptions { get; set; }
         = new() { Center = new Position(0, 0), Zoom = 1 };
+
     [Parameter] public EventCallback<Map> OnMapReady { get; set; }
     [Parameter] public EventCallback<Map> OnMapBodyClicked { get; set; }
     [Parameter] public EventCallback<(Map Map, string VehicleId)> OnBusMarkerClicked { get; set; }
@@ -50,38 +50,22 @@ public partial class Map : ComponentBase
     }
 
     [JSInvokable("getMapSettings")]
-    public async Task<object> GetMapSettings()
+    public Task<object> GetMapSettings()
     {
         var longitude = CameraOptions.Center.Longitude;
         var latitude = CameraOptions.Center.Latitude;
-
         var language = CultureInfo.DefaultThreadCurrentCulture?.Name ?? "en-US";
-        var tokenApiUrl = "https://localhost:52834/maps/auth/token";
-        //var apiToken = await GetBearerTokenAsync();
 
-        return new
+        var apiKey = Configuration.GetValue<string>("MapTiler:ApiKey") ?? string.Empty;
+        var styleUrl = Configuration.GetValue<string>("MapTiler:StyleUrl") ?? string.Empty;
+
+        return Task.FromResult<object>(new
         {
-            mapAccClientId = Configuration.GetValue<string>("AzureMaps:AccountClientId"),
-            tokenApiUrl,
-            //apiToken,  // apiToken = "<<bearer token for TJ API>>",
+            maptilerKey = apiKey,
+            styleUrl,
             center = new[] { longitude, latitude },
             zoom = CameraOptions.Zoom,
-            language,
-            style = GetAzureMapStyle(MapStyles.Road)
-        };
+            language
+        });
     }
-
-    void ChangeMapStyle(MapStyles style) => _ = SetMapStyleAsync(style);
-
-    //async Task<string?> GetBearerTokenAsync()
-    //{
-    //    var tokenResult = await AccessTokenProvider.RequestAccessToken();
-
-    //    if (tokenResult.TryGetToken(out var token))
-    //    {
-    //        return token.Value;
-    //    }
-
-    //    return null; // Token not available
-    //}
 }

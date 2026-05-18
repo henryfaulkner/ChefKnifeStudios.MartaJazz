@@ -1,4 +1,4 @@
-window.ChefMapLibre = {
+window.ChefMap = {
     maps: {},
 
     createMap: async function (containerDivId, dotNetRef) {
@@ -11,7 +11,7 @@ window.ChefMapLibre = {
             zoom: settings.zoom
         });
 
-        ChefMapLibre.maps[containerDivId] = map;
+        ChefMap.maps[containerDivId] = map;
 
         map.on('load', function () {
             // Vehicles GeoJSON source + circle layer — must exist before the animator calls getSource('vehicles')
@@ -64,31 +64,31 @@ window.ChefMapLibre = {
     },
 
     setMapZoom: function (containerDivId, zoom) {
-        let map = ChefMapLibre.maps[containerDivId];
+        let map = ChefMap.maps[containerDivId];
         if (!map) return;
         map.setZoom(zoom);
     },
 
     toggleTraffic: function (containerDivId, on) {
-        console.info('[ChefMapLibre] toggleTraffic: traffic layer not implemented for POC (no-op)');
+        console.info('[ChefMap] toggleTraffic: traffic layer not implemented for POC (no-op)');
     },
 
     setMapStyle: function (containerDivId, styleName) {
-        console.info('[ChefMapLibre] setMapStyle: style switching not implemented for POC (no-op)');
+        console.info('[ChefMap] setMapStyle: style switching not implemented for POC (no-op)');
     },
 
     centerVehiclePin: function (containerDivId, vehicleId) {
-        let map = ChefMapLibre.maps[containerDivId];
+        let map = ChefMap.maps[containerDivId];
         if (!map) return;
 
-        let state = ChefMapLibreAnimator.vehicles[vehicleId];
+        let state = ChefMapAnimator.vehicles[vehicleId];
         if (state && state.currentPos) {
             map.easeTo({ center: state.currentPos });
         }
     },
 
     plotFeatures: function (containerDivId, sourceId, featureCollection, centerMap) {
-        let map = ChefMapLibre.maps[containerDivId];
+        let map = ChefMap.maps[containerDivId];
         if (!map) return;
 
         let source = map.getSource(sourceId);
@@ -123,7 +123,7 @@ window.ChefMapLibre = {
     },
 
     showRouteShape: function (containerDivId, geoJson) {
-        let map = ChefMapLibre.maps[containerDivId];
+        let map = ChefMap.maps[containerDivId];
         if (!map) return;
 
         try {
@@ -141,12 +141,12 @@ window.ChefMapLibre = {
                 source.setData(feature);
             }
         } catch (err) {
-            console.warn('[ChefMapLibre] showRouteShape: failed to parse GeoJSON', err);
+            console.warn('[ChefMap] showRouteShape: failed to parse GeoJSON', err);
         }
     },
 
     clearRouteShape: function (containerDivId) {
-        let map = ChefMapLibre.maps[containerDivId];
+        let map = ChefMap.maps[containerDivId];
         if (!map) return;
 
         let style = map.getStyle();
@@ -166,7 +166,7 @@ window.ChefMapLibre = {
     },
 
     addRouteShapeFeature: function (containerDivId, routeId, coordinates, color) {
-        let map = ChefMapLibre.maps[containerDivId];
+        let map = ChefMap.maps[containerDivId];
         if (!map) return;
 
         let sourceId = 'route-' + routeId;

@@ -1,14 +1,5 @@
-﻿<div>
+<div>
     <div class="map-tools bg-primary">
-        <button class="btn btn-sm btn-secondary" type="button" @onclick="@(() => ChangeMapStyle(MapStyles.GrayscaleLight))">Gray</button>
-        <button class="btn btn-sm btn-secondary" type="button" @onclick="@(() => ChangeMapStyle(MapStyles.Satellite))">Satellite</button>
-        <button class="btn btn-sm btn-secondary" type="button" @onclick="@(() => ChangeMapStyle(MapStyles.Road))">Road</button>
-        <button class="btn btn-sm btn-secondary" type="button" @onclick="@(() => ChangeMapStyle(MapStyles.Night))">Night</button>
-        <button class="btn btn-sm btn-secondary" type="button" @onclick="@(() => ChangeMapStyle(MapStyles.Hybrid))">Hybrid</button>
-        <label>
-            <input type="checkbox" checked="@_showTraffic" @onchange="ShowTrafficAsync" />
-            Show Traffic
-        </label>
         <button class="btn btn-sm btn-secondary" type="button" @onclick="@(() => ChangeMapZoomAsync(true))">
             <img alt="Zoom In" src="images/zoom-in.svg" />
         </button>
