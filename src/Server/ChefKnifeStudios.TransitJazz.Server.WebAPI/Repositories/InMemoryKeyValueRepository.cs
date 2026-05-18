@@ -1,11 +1,11 @@
 using Ardalis.Result;
-using ChefKnifeStudios.TransitJazz.Server.Core.Interfaces;
+using ChefKnifeStudios.TransitJazz.Server.WebAPI.Interfaces;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ChefKnifeStudios.TransitJazz.Server.Infrastructure;
+namespace ChefKnifeStudios.TransitJazz.Server.WebAPI.Repositories;
 
 public class InMemoryKeyValueRepository<T> : IKeyValueRepository<T>
 {

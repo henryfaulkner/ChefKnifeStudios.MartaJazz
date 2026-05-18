@@ -1,6 +1,5 @@
-using ChefKnifeStudios.TransitJazz.Server.Core.Interfaces;
-using ChefKnifeStudios.TransitJazz.Server.Infrastructure;
-using ChefKnifeStudios.TransitJazz.Server.BL.Services;
+using ChefKnifeStudios.TransitJazz.Server.WebAPI.Interfaces;
+using ChefKnifeStudios.TransitJazz.Server.WebAPI.Repositories;
 using ChefKnifeStudios.TransitJazz.Shared;
 using ChefKnifeStudios.TransitJazz.Shared.Events;
 using Scalar.AspNetCore;
