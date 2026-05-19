@@ -22,12 +22,12 @@ stages:
             inputs:
               command: 'publish'
               publishWebProjects: false
-              projects: 'src/Client/ChefKnifeStudios.TransitJazz.Client.WebApp/ChefKnifeStudios.TransitJazz.Client.WebApp.csproj'
+              projects: 'src/Client/ChefKnifeStudios.MartaJazz.Client.WebApp/ChefKnifeStudios.MartaJazz.Client.WebApp.csproj'
               arguments: '-c Release /p:BlazorEnableCompression=false'
               zipAfterPublish: false
           - task: PublishPipelineArtifact@1
             inputs:
-              targetPath: 'src/Client/ChefKnifeStudios.TransitJazz.Client.WebApp/bin/Release/net10.0/publish/wwwroot'
+              targetPath: 'src/Client/ChefKnifeStudios.MartaJazz.Client.WebApp/bin/Release/net10.0/publish/wwwroot'
               artifact: 'blazor-client'
 
   - stage: DeployProd

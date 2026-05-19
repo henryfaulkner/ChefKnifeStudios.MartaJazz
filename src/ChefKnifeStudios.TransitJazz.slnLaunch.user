@@ -3,15 +3,15 @@
     "Name": "New Profile",
     "Projects": [
       {
-        "Path": "Client\\ChefKnifeStudios.TransitJazz.Client.WebApp\\ChefKnifeStudios.TransitJazz.Client.WebApp.csproj",
+        "Path": "Client\\ChefKnifeStudios.MartaJazz.Client.WebApp\\ChefKnifeStudios.MartaJazz.Client.WebApp.csproj",
         "Action": "Start"
       },
       {
-        "Path": "Server\\ChefKnifeStudios.TransitJazz.Server.WebAPI\\ChefKnifeStudios.TransitJazz.Server.WebAPI.csproj",
+        "Path": "Server\\ChefKnifeStudios.MartaJazz.Server.WebAPI\\ChefKnifeStudios.MartaJazz.Server.WebAPI.csproj",
         "Action": "Start"
       },
       {
-        "Path": "Server\\ChefKnifeStudios.TransitJazz.Server.TransitDataWorker\\ChefKnifeStudios.TransitJazz.Server.TransitDataWorker.csproj",
+        "Path": "Server\\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker\\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker.csproj",
         "Action": "Start"
       }
     ]

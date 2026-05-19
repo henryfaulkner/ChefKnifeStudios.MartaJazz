@@ -62,3 +62,4 @@ nunit-*.xml
 .opencode
 .specify
 specs
+docs

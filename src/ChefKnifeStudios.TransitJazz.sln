@@ -6,21 +6,21 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Client", "Client", "{BA754A
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Server", "Server", "{0A4BBF11-85FF-4296-926E-787C254B8C8C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.TransitJazz.Shared", "ChefKnifeStudios.TransitJazz.Shared\ChefKnifeStudios.TransitJazz.Shared.csproj", "{612EE024-D995-40B8-BFBE-09670D3ED08F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.MartaJazz.Shared", "ChefKnifeStudios.MartaJazz.Shared\ChefKnifeStudios.MartaJazz.Shared.csproj", "{612EE024-D995-40B8-BFBE-09670D3ED08F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.TransitJazz.ServiceDefaults", "ChefKnifeStudios.TransitJazz.ServiceDefaults\ChefKnifeStudios.TransitJazz.ServiceDefaults.csproj", "{0D0D0BE6-931B-4753-B0E2-3F27BF9C0EB3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.MartaJazz.ServiceDefaults", "ChefKnifeStudios.MartaJazz.ServiceDefaults\ChefKnifeStudios.MartaJazz.ServiceDefaults.csproj", "{0D0D0BE6-931B-4753-B0E2-3F27BF9C0EB3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.TransitJazz.AppHost", "ChefKnifeStudios.TransitJazz.AppHost\ChefKnifeStudios.TransitJazz.AppHost.csproj", "{00885284-98BF-46D0-AE51-218E639EC5FD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.MartaJazz.AppHost", "ChefKnifeStudios.MartaJazz.AppHost\ChefKnifeStudios.MartaJazz.AppHost.csproj", "{00885284-98BF-46D0-AE51-218E639EC5FD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.TransitJazz.Client.Core", "Client\ChefKnifeStudios.TransitJazz.Client.Core\ChefKnifeStudios.TransitJazz.Client.Core.csproj", "{84759958-9430-4104-91A9-E39E6B4C5B38}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.MartaJazz.Client.Core", "Client\ChefKnifeStudios.MartaJazz.Client.Core\ChefKnifeStudios.MartaJazz.Client.Core.csproj", "{84759958-9430-4104-91A9-E39E6B4C5B38}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.TransitJazz.Client.Shared", "Client\ChefKnifeStudios.TransitJazz.Client.Shared\ChefKnifeStudios.TransitJazz.Client.Shared.csproj", "{0F839FE1-2127-45C1-9736-7612C88F5647}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.MartaJazz.Client.Shared", "Client\ChefKnifeStudios.MartaJazz.Client.Shared\ChefKnifeStudios.MartaJazz.Client.Shared.csproj", "{0F839FE1-2127-45C1-9736-7612C88F5647}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.TransitJazz.Client.WebApp", "Client\ChefKnifeStudios.TransitJazz.Client.WebApp\ChefKnifeStudios.TransitJazz.Client.WebApp.csproj", "{80CE7430-12E1-4CCE-AF97-86C4976F8262}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.MartaJazz.Client.WebApp", "Client\ChefKnifeStudios.MartaJazz.Client.WebApp\ChefKnifeStudios.MartaJazz.Client.WebApp.csproj", "{80CE7430-12E1-4CCE-AF97-86C4976F8262}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.TransitJazz.Server.WebAPI", "Server\ChefKnifeStudios.TransitJazz.Server.WebAPI\ChefKnifeStudios.TransitJazz.Server.WebAPI.csproj", "{1C97A2B4-A9A2-4200-8E70-7B834F68DF57}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.MartaJazz.Server.WebAPI", "Server\ChefKnifeStudios.MartaJazz.Server.WebAPI\ChefKnifeStudios.MartaJazz.Server.WebAPI.csproj", "{1C97A2B4-A9A2-4200-8E70-7B834F68DF57}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.TransitJazz.Server.TransitDataWorker", "Server\ChefKnifeStudios.TransitJazz.Server.TransitDataWorker\ChefKnifeStudios.TransitJazz.Server.TransitDataWorker.csproj", "{588411F1-4FB7-8C06-B63C-4A43A1BDA3ED}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChefKnifeStudios.MartaJazz.Server.TransitDataWorker", "Server\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker.csproj", "{588411F1-4FB7-8C06-B63C-4A43A1BDA3ED}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

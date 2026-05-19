@@ -9,7 +9,7 @@ pool:
 variables:
   azure-subscription-service-connection: TransitJazzSC
   container-registry: chefknife.azurecr.io
-  api-container-name: chefknifestudios.transitjazz.server.webapi
+  api-container-name: ChefKnifeStudios.MartaJazz.server.webapi
 
 stages:
   - stage: BuildAndPublish
@@ -24,7 +24,7 @@ stages:
               docker compose build
             displayName: 'Build Docker images'
           - script: |
-              docker tag chefknifestudios.transitjazz.server.webapi:latest $(container-registry)/$(api-container-name):latest
+              docker tag ChefKnifeStudios.MartaJazz.server.webapi:latest $(container-registry)/$(api-container-name):latest
               docker push $(container-registry)/$(api-container-name):latest
             displayName: 'Push API image'
 

@@ -49,26 +49,26 @@ MARTA's GTFS static feed uses internal numeric IDs as `route_id` (e.g., `"26932"
 ### Solution Structure (11 projects)
 
 ```
-ChefKnifeStudios.TransitJazz.sln
+ChefKnifeStudios.MartaJazz.sln
 │
 ├── Shared
-│   └── ChefKnifeStudios.TransitJazz.Shared          # Models, events, geospatial utilities
+│   └── ChefKnifeStudios.MartaJazz.Shared          # Models, events, geospatial utilities
 │
 ├── Server
-│   ├── ChefKnifeStudios.TransitJazz.Server.Core      # Domain interfaces, models (Ardalis.Result)
-│   ├── ChefKnifeStudios.TransitJazz.Server.BL         # Business logic services
-│   ├── ChefKnifeStudios.TransitJazz.Server.Infrastructure  # Data access (Redis, in-memory KV)
-│   ├── ChefKnifeStudios.TransitJazz.Server.WebAPI     # ASP.NET Core API + SignalR hub
-│   └── ChefKnifeStudios.TransitJazz.Server.TransitDataWorker  # Background worker service
+│   ├── ChefKnifeStudios.MartaJazz.Server.Core      # Domain interfaces, models (Ardalis.Result)
+│   ├── ChefKnifeStudios.MartaJazz.Server.BL         # Business logic services
+│   ├── ChefKnifeStudios.MartaJazz.Server.Infrastructure  # Data access (Redis, in-memory KV)
+│   ├── ChefKnifeStudios.MartaJazz.Server.WebAPI     # ASP.NET Core API + SignalR hub
+│   └── ChefKnifeStudios.MartaJazz.Server.TransitDataWorker  # Background worker service
 │
 ├── Client
-│   ├── ChefKnifeStudios.TransitJazz.Client.Core       # Client services, config
-│   ├── ChefKnifeStudios.TransitJazz.Client.Shared     # Blazor components (RCL)
-│   └── ChefKnifeStudios.TransitJazz.Client.WebApp     # Blazor WASM app
+│   ├── ChefKnifeStudios.MartaJazz.Client.Core       # Client services, config
+│   ├── ChefKnifeStudios.MartaJazz.Client.Shared     # Blazor components (RCL)
+│   └── ChefKnifeStudios.MartaJazz.Client.WebApp     # Blazor WASM app
 │
 ├── Orchestration
-│   ├── ChefKnifeStudios.TransitJazz.AppHost           # .NET Aspire orchestrator (WebAPI, WebApp, Worker)
-│   └── ChefKnifeStudios.TransitJazz.ServiceDefaults   # Aspire service defaults, OTEL config, service discovery
+│   ├── ChefKnifeStudios.MartaJazz.AppHost           # .NET Aspire orchestrator (WebAPI, WebApp, Worker)
+│   └── ChefKnifeStudios.MartaJazz.ServiceDefaults   # Aspire service defaults, OTEL config, service discovery
 │
 └── POC
     └── BusDataPoc/MartaJazz.Engine                    # Go-based early prototype (archived)

@@ -1,8 +1,8 @@
 services:
-  chefknifestudios.transitjazz.server.webapi:
+  ChefKnifeStudios.MartaJazz.server.webapi:
     build:
       context: .
-      dockerfile: ./src/Server/ChefKnifeStudios.TransitJazz.Server.WebAPI/Dockerfile
-    image: ${CONTAINER_REGISTRY:-localhost:5000}/chefknifestudios.transitjazz.server.webapi:${CONTAINER_TAG:-latest}
+      dockerfile: ./src/Server/ChefKnifeStudios.MartaJazz.Server.WebAPI/Dockerfile
+    image: ${CONTAINER_REGISTRY:-localhost:5000}/ChefKnifeStudios.MartaJazz.server.webapi:${CONTAINER_TAG:-latest}
     ports:
       - "5268:8080"
