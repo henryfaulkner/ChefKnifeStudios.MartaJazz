@@ -2,10 +2,13 @@ using ChefKnifeStudios.MartaJazz.Client.Core.Services;
 using ChefKnifeStudios.MartaJazz.Client.Core.Services.EndpointsServices;
 using ChefKnifeStudios.MartaJazz.Client.Shared.Components;
 using ChefKnifeStudios.MartaJazz.Client.Shared.Models;
+using ChefKnifeStudios.MartaJazz.Client.Shared.Services;
+using ChefKnifeStudios.MartaJazz.Client.Shared.Services.JsInterop;
 using ChefKnifeStudios.MartaJazz.Shared.Events;
 using ChefKnifeStudios.MartaJazz.Shared.GtfsData;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
+using Microsoft.JSInterop;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,19 +17,24 @@ using System.Threading.Tasks;
 
 namespace ChefKnifeStudios.MartaJazz.Client.WebApp.Pages;
 
-public partial class TransitMap : ComponentBase, IDisposable
+public partial class TransitMap : ComponentBase, IAsyncDisposable
 {
     [Inject] ISignalRNotificationService NotificationService { get; set; } = null!;
     [Inject] ILogger<TransitMap> Logger { get; set; } = null!;
     [Inject] IGtfsEndpointsService GtfsEndpointsService { get; set; } = null!;
+    [Inject] ITriggerPointGenerator TriggerPointGenerator { get; set; } = null!;
+    [Inject] ICheckpointTrackerJsInterop CheckpointTracker { get; set; } = null!;
+    [Inject] ITransitSynthJsInterop TransitSynth { get; set; } = null!;
 
     Map? _map;
     bool _mapReady;
     IEnumerable<EventEnvelope>? _pendingBatch;
 
-
     string _connectionLabel = "Connecting…";
     string _connectionCssClass = "connecting";
+
+    bool _audioUnlocked;
+    DotNetObjectReference<object>? _dotNetRef;
 
     // vehicleId → routeId, updated on every VehiclePositionUpdatedEvent
     readonly Dictionary<string, string> _vehicleRouteMap = new();
@@ -39,6 +47,8 @@ public partial class TransitMap : ComponentBase, IDisposable
 
     protected override async Task OnInitializedAsync()
     {
+        _dotNetRef = DotNetObjectReference.Create((object)this);
+
         try
         {
             await NotificationService.InitAsync();
@@ -56,9 +66,35 @@ public partial class TransitMap : ComponentBase, IDisposable
         }
     }
 
-    public void Dispose()
+    async Task OnPageClickedAsync()
+    {
+        if (_audioUnlocked) return;
+        await TransitSynth.UnlockAsync();
+        _audioUnlocked = true;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnCrossingsAsync(CrossingEventDto[] crossings)
+    {
+        foreach (var crossing in crossings)
+        {
+            try
+            {
+                await TransitSynth.TriggerNoteAsync(crossing.RouteId, crossing.VehicleId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "TransitMap.OnCrossingsAsync: TriggerNoteAsync failed for vehicle {VehicleId} on route {RouteId}", crossing.VehicleId, crossing.RouteId);
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
     {
         NotificationService.NotificationReceived -= HandleVehicleBatchAsync;
+        await CheckpointTracker.ClearAsync();
+        _dotNetRef?.Dispose();
     }
 
     async Task OnMapReadyAsync(Map map)
@@ -71,6 +107,7 @@ public partial class TransitMap : ComponentBase, IDisposable
         {
             await _map.AddRouteShapeFeatureAsync(routeId, feature.Geometry.Coordinates, feature.Properties.Color);
             await _map.LoadRouteGeometryForAnimationAsync(routeId, feature.Geometry.Coordinates);
+            await ConfigureTrackerForRouteAsync(routeId, feature);
         }
         Logger.LogDebug("TransitMap: route geometry push complete");
 
@@ -80,6 +117,49 @@ public partial class TransitMap : ComponentBase, IDisposable
             _pendingBatch = null;
             await HandleVehicleBatchAsync(batch);
         }
+    }
+
+    async Task ConfigureTrackerForRouteAsync(string routeId, RouteShapeFeature feature)
+    {
+        try
+        {
+            var coords = feature.Geometry.Coordinates;
+
+            // Build cumulative distances mirroring ChefMapAnimator.buildCumulativeDistances
+            var cumDist = new double[coords.Length];
+            cumDist[0] = 0;
+            for (var i = 1; i < coords.Length; i++)
+                cumDist[i] = cumDist[i - 1] + HaversineMeters(coords[i - 1], coords[i]);
+
+            var triggerPoints = TriggerPointGenerator.Generate(coords, cumDist);
+            Logger.LogDebug("TransitMap: route {RouteId} → {Count} trigger points", routeId, triggerPoints.Count);
+
+            if (_map is not null)
+            {
+                var jsPoints = triggerPoints.Select(p => (object)new { index = p.Index, alongDistanceM = p.AlongDistanceM }).ToArray();
+                await _map.AddTriggerPointMarkersAsync(routeId, jsPoints, coords);
+            }
+
+            if (_dotNetRef is not null)
+                await CheckpointTracker.ConfigureRouteAsync(routeId, triggerPoints.ToArray(), _dotNetRef);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "TransitMap: failed to configure tracker for route {RouteId}", routeId);
+        }
+    }
+
+    static double HaversineMeters(double[] p1, double[] p2)
+    {
+        const double R = 6371000;
+        const double toRad = Math.PI / 180;
+        var dLat = (p2[1] - p1[1]) * toRad;
+        var dLon = (p2[0] - p1[0]) * toRad;
+        var lat1 = p1[1] * toRad;
+        var lat2 = p2[1] * toRad;
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(lat1) * Math.Cos(lat2) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 
     async Task HandleVehicleBatchAsync(IEnumerable<EventEnvelope> batch)
@@ -100,6 +180,8 @@ public partial class TransitMap : ComponentBase, IDisposable
         Logger.LogDebug("TransitMap: batch contains {NearestCount} nearest-point records, {PosCount} position events",
             nearestPointRecords.Length,
             batch.Count(x => x.Payload is VehiclePositionUpdatedEvent));
+
+        nearestPointRecords = nearestPointRecords.Where(r => IsAllowedRoute(r.RouteId)).ToArray();
 
         if (nearestPointRecords.Length > 0)
         {
@@ -127,7 +209,8 @@ public partial class TransitMap : ComponentBase, IDisposable
         {
             var payloadBatch = batch
                 .Where(x => x.Payload is VehiclePositionUpdatedEvent)
-                .Select(x => x.Payload as VehiclePositionUpdatedEvent);
+                .Select(x => x.Payload as VehiclePositionUpdatedEvent)
+                .Where(x => x?.Trip?.RouteId is { } rid && IsAllowedRoute(rid));
 
             var featureCollection = new
             {
@@ -194,7 +277,14 @@ public partial class TransitMap : ComponentBase, IDisposable
         foreach (var routeShapeFeature in res.Value)
         {
             var key = routeShapeFeature.Properties.RouteShortName ?? routeShapeFeature.Properties.RouteId;
-            _routeShapeCache[key] = routeShapeFeature;
+            if (IsAllowedRoute(key))
+                _routeShapeCache[key] = routeShapeFeature;
         }
     }
+
+    // Returns true for routes that should render and produce audio.
+    // Restrict to a subset for focused testing; return true unconditionally for all routes.
+    static bool IsAllowedRoute(string routeKey) => true;
+
+    public record CrossingEventDto(string VehicleId, string RouteId, int TriggerIndex);
 }

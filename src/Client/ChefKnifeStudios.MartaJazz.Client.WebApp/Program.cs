@@ -2,6 +2,7 @@ using Blazored.LocalStorage;
 using ChefKnifeStudios.MartaJazz.Client.Core;
 using ChefKnifeStudios.MartaJazz.Client.Core.Services;
 using ChefKnifeStudios.MartaJazz.Client.Core.Services.EndpointsServices;
+using ChefKnifeStudios.MartaJazz.Client.Shared.Services;
 using ChefKnifeStudios.MartaJazz.Client.Shared.Services.JsInterop;
 using ChefKnifeStudios.MartaJazz.Client.WebApp;
 using ChefKnifeStudios.MartaJazz.Shared;
@@ -48,6 +49,10 @@ builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationServi
 builder.Services.AddTransient<IGtfsEndpointsService, GtfsEndpointsService>();
 
 builder.Services.AddSingleton<IAudioPlayerJsInterop, AudioPlayerJsInterop>();
+
+builder.Services.AddScoped<ITriggerPointGenerator, TriggerPointGenerator>();
+builder.Services.AddSingleton<ICheckpointTrackerJsInterop, CheckpointTrackerJsInterop>();
+builder.Services.AddSingleton<ITransitSynthJsInterop, TransitSynthJsInterop>();
 
 builder.Services.AddMatBlazor();
 
