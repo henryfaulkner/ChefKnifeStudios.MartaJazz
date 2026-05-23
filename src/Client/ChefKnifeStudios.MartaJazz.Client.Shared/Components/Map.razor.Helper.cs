@@ -123,6 +123,18 @@ public partial class Map : ComponentBase
         }
     }
 
+    public async Task AddTriggerPointMarkersAsync(string routeId, object[] triggerPoints, double[][] coords)
+    {
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("ChefMap.addTriggerPointMarkers", ElementId, routeId, triggerPoints, coords);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Map] AddTriggerPointMarkers failed for routeId={routeId}: {ex}");
+        }
+    }
+
     public async Task ProcessNearestPointBatchAsync(object[] records)
     {
         try

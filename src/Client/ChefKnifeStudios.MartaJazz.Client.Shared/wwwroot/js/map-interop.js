@@ -165,6 +165,48 @@ window.ChefMap = {
         });
     },
 
+    // Debug: render trigger-point dots for all configured routes.
+    // Accumulates points across calls (one call per route); idempotent per routeId.
+    _triggerPointFeatures: {},  // routeId → Feature[]
+
+    addTriggerPointMarkers: function (containerDivId, routeId, triggerPoints, coords) {
+        let map = ChefMap.maps[containerDivId];
+        if (!map) return;
+
+        // Build one Point feature per trigger point using the route's coord array
+        ChefMap._triggerPointFeatures[routeId] = triggerPoints.map(function (tp) {
+            let coord = coords[tp.index] || coords[coords.length - 1];
+            return {
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: coord },
+                properties: { routeId: routeId, triggerIndex: tp.index, alongDistanceM: tp.alongDistanceM }
+            };
+        });
+
+        // Flatten all routes into one FeatureCollection and push to the shared source
+        let allFeatures = Object.values(ChefMap._triggerPointFeatures).flat();
+        let fc = { type: 'FeatureCollection', features: allFeatures };
+
+        let source = map.getSource('trigger-points');
+        if (!source) {
+            map.addSource('trigger-points', { type: 'geojson', data: fc });
+            map.addLayer({
+                id: 'trigger-points-layer',
+                type: 'circle',
+                source: 'trigger-points',
+                paint: {
+                    'circle-radius': 4,
+                    'circle-color': '#facc15',       // yellow — visible against route lines
+                    'circle-opacity': 0.85,
+                    'circle-stroke-width': 1,
+                    'circle-stroke-color': '#78350f'  // dark amber outline
+                }
+            }, 'vehicles-layer');  // insert below vehicles so buses render on top
+        } else {
+            source.setData(fc);
+        }
+    },
+
     addRouteShapeFeature: function (containerDivId, routeId, coordinates, color) {
         let map = ChefMap.maps[containerDivId];
         if (!map) return;
