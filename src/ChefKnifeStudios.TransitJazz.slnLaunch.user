@@ -9,10 +9,6 @@
       {
         "Path": "Server\\ChefKnifeStudios.MartaJazz.Server.WebAPI\\ChefKnifeStudios.MartaJazz.Server.WebAPI.csproj",
         "Action": "Start"
-      },
-      {
-        "Path": "Server\\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker\\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker.csproj",
-        "Action": "Start"
       }
     ]
   }

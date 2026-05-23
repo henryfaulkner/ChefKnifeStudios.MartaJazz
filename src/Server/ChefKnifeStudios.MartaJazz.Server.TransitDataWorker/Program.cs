@@ -1,4 +1,5 @@
 using ChefKnifeStudios.MartaJazz.Server.TransitDataWorker;
+using ChefKnifeStudios.MartaJazz.Shared;
 
 var builder = Host.CreateApplicationBuilder(args);
 

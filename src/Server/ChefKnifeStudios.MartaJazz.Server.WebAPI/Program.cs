@@ -14,6 +14,7 @@ using System;
 using ChefKnifeStudios.MartaJazz.Server.WebAPI.EndpointGroups;
 using ChefKnifeStudios.MartaJazz.Server.WebAPI.GtfsStatic;
 using ChefKnifeStudios.MartaJazz.Server.WebAPI.SignalR;
+using ChefKnifeStudios.MartaJazz.Server.TransitDataWorker;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -92,6 +93,15 @@ builder.Services.AddSingleton<IFeatureFlagService>(sp =>
     }
     return new FeatureFlagService(flags);
 });
+
+builder.Services.AddSingleton<TokenProvider>();
+builder.Services.AddSingleton<ITransitHubPublisher, SignalRHubPublisher>();
+builder.Services.AddHttpClient("RouteShapeApi", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["services:apiservice:https:0"]
+        ?? builder.Configuration["WebApi:BaseUrl"]!);
+});
+builder.Services.AddHostedService<Worker>();
 
 var app = builder.Build();
 

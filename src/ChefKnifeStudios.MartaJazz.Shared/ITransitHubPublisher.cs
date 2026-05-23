@@ -7,5 +7,6 @@ namespace ChefKnifeStudios.MartaJazz.Shared;
 
 public interface ITransitHubPublisher
 {
-    Task PublishBatchAsync(List<EventEnvelope> batch, CancellationToken ct = default);
+    Task StartAsync(CancellationToken ct = default);
+    Task<bool> PublishBatchAsync(List<EventEnvelope> batch, CancellationToken ct = default);
 }
