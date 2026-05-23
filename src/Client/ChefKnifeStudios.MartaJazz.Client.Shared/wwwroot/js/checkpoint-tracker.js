@@ -2,7 +2,7 @@
 // Consumes per-tick position events from ChefMapAnimator; dispatches CrossingEvent batches to C#.
 
 const _routeTriggerPoints = new Map();  // routeId → TriggerPoint[]
-const _vehicleState = new Map();         // vehicleId → { routeId, lastTriggeredIndex, lastTriggerTimeMs }
+const _vehicleState = new Map();         // vehicleId → { routeId, lastTriggeredDistanceM, lastTriggerTimeMs }
 let _dotNetRef = null;
 let _tickHookInstalled = false;
 
@@ -37,8 +37,49 @@ export function clear() {
     log('cleared');
 }
 
+// Projects pos [lon, lat] onto a route's cumDist array, returning the along-route distance in metres.
+// Uses the same nearest-vertex approach as the animator but then linearly interpolates within the
+// winning segment so the result is continuous rather than quantised to vertex boundaries.
+function _alongDistanceM(pos, coords, cumDist) {
+    let minDist = Infinity;
+    let minIdx = 0;
+    for (let i = 0; i < coords.length; i++) {
+        const dx = coords[i][0] - pos[0];
+        const dy = coords[i][1] - pos[1];
+        const d = dx * dx + dy * dy;  // squared — only need relative order
+        if (d < minDist) { minDist = d; minIdx = i; }
+    }
+
+    // Interpolate within the segment that contains the nearest vertex to get a
+    // sub-vertex distance rather than snapping to the vertex itself.
+    // Check the segment before and after minIdx; pick whichever is closer.
+    let bestD = cumDist[minIdx];
+
+    for (const segStart of [minIdx - 1, minIdx]) {
+        const segEnd = segStart + 1;
+        if (segStart < 0 || segEnd >= coords.length) continue;
+
+        const ax = coords[segStart][0], ay = coords[segStart][1];
+        const bx = coords[segEnd][0],   by = coords[segEnd][1];
+        const dx = bx - ax, dy = by - ay;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) continue;
+
+        const t = Math.max(0, Math.min(1, ((pos[0] - ax) * dx + (pos[1] - ay) * dy) / lenSq));
+        const segLen = cumDist[segEnd] - cumDist[segStart];
+        const candidate = cumDist[segStart] + t * segLen;
+
+        // Pick the candidate closest to minIdx's cumDist (avoids jumping to wrong segment)
+        if (Math.abs(candidate - cumDist[minIdx]) < Math.abs(bestD - cumDist[minIdx])) {
+            bestD = candidate;
+        }
+    }
+
+    return bestD;
+}
+
 // Called at end of each ChefMapAnimator tick with vehicles that moved this frame.
-// positionEvents: Array<{ vehicleId: string, routeId: string, currIndex: number }>
+// positionEvents: Array<{ vehicleId: string, routeId: string, currDistM: number }>
 export function onTick(positionEvents) {
     if (!positionEvents || positionEvents.length === 0) return;
     if (!_dotNetRef) return;
@@ -47,17 +88,17 @@ export function onTick(positionEvents) {
     const now = performance.now();
 
     for (const ev of positionEvents) {
-        const { vehicleId, routeId, currIndex } = ev;
+        const { vehicleId, routeId, currDistM } = ev;
         const triggers = _routeTriggerPoints.get(routeId);
         if (!triggers || triggers.length === 0) continue;  // FR-011: route geometry not yet loaded
 
         const state = _vehicleState.get(vehicleId);
 
         if (!state) {
-            // FR-009: first observation — baseline at current index, fire nothing
+            // FR-009: first observation — baseline at current distance, fire nothing
             _vehicleState.set(vehicleId, {
                 routeId,
-                lastTriggeredIndex: currIndex,
+                lastTriggeredDistanceM: currDistM,
                 lastTriggerTimeMs: 0,
             });
             continue;
@@ -66,29 +107,25 @@ export function onTick(positionEvents) {
         if (state.routeId !== routeId) {
             // Vehicle transferred routes — reset, fire nothing
             state.routeId = routeId;
-            state.lastTriggeredIndex = currIndex;
+            state.lastTriggeredDistanceM = currDistM;
             state.lastTriggerTimeMs = 0;
             continue;
         }
 
-        const delta = currIndex - state.lastTriggeredIndex;
+        const delta = currDistM - state.lastTriggeredDistanceM;
 
         if (delta <= 0) continue;  // no forward movement or direction reversal
 
-        // FR-010: teleport check using the route's cumDist (if available via animator's routeGeometry)
-        const routeGeom = window.ChefMapAnimator?.routeGeometry?.[routeId];
-        if (routeGeom && routeGeom.cumDist) {
-            const distAdvanced = routeGeom.cumDist[currIndex] - routeGeom.cumDist[state.lastTriggeredIndex];
-            if (distAdvanced > TELEPORT_DIST_M) {
-                state.lastTriggeredIndex = currIndex;
-                state.lastTriggerTimeMs = 0;
-                continue;
-            }
+        // FR-010: teleport check
+        if (delta > TELEPORT_DIST_M) {
+            state.lastTriggeredDistanceM = currDistM;
+            state.lastTriggerTimeMs = 0;
+            continue;
         }
 
-        // Find trigger points in (lastTriggeredIndex, currIndex]
+        // Find trigger points in (lastTriggeredDistanceM, currDistM]
         for (const tp of triggers) {
-            if (tp.index > state.lastTriggeredIndex && tp.index <= currIndex) {
+            if (tp.alongDistanceM > state.lastTriggeredDistanceM && tp.alongDistanceM <= currDistM) {
                 // FR-007: cooldown suppression
                 if ((now - state.lastTriggerTimeMs) >= COOLDOWN_MS) {
                     batch.push({ vehicleId, routeId, triggerIndex: tp.index });
@@ -97,7 +134,7 @@ export function onTick(positionEvents) {
             }
         }
 
-        state.lastTriggeredIndex = currIndex;
+        state.lastTriggeredDistanceM = currDistM;
     }
 
     if (batch.length > 0) {
@@ -133,8 +170,8 @@ function _installTickHook() {
             const routeGeom = window.ChefMapAnimator.routeGeometry[state.routeId];
             if (!routeGeom) continue;
 
-            const currIndex = window.ChefMapAnimator.findNearestIndex(routeGeom.coords, state.currentPos);
-            positionEvents.push({ vehicleId: state.vehicleId, routeId: state.routeId, currIndex });
+            const currDistM = _alongDistanceM(state.currentPos, routeGeom.coords, routeGeom.cumDist);
+            positionEvents.push({ vehicleId: state.vehicleId, routeId: state.routeId, currDistM });
         }
 
         if (positionEvents.length > 0) {

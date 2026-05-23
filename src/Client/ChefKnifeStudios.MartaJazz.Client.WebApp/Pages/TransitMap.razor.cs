@@ -181,6 +181,8 @@ public partial class TransitMap : ComponentBase, IAsyncDisposable
             nearestPointRecords.Length,
             batch.Count(x => x.Payload is VehiclePositionUpdatedEvent));
 
+        nearestPointRecords = nearestPointRecords.Where(r => IsAllowedRoute(r.RouteId)).ToArray();
+
         if (nearestPointRecords.Length > 0)
         {
             var records = nearestPointRecords.Select(r => (object)new
@@ -207,7 +209,8 @@ public partial class TransitMap : ComponentBase, IAsyncDisposable
         {
             var payloadBatch = batch
                 .Where(x => x.Payload is VehiclePositionUpdatedEvent)
-                .Select(x => x.Payload as VehiclePositionUpdatedEvent);
+                .Select(x => x.Payload as VehiclePositionUpdatedEvent)
+                .Where(x => x?.Trip?.RouteId is { } rid && IsAllowedRoute(rid));
 
             var featureCollection = new
             {
@@ -274,9 +277,14 @@ public partial class TransitMap : ComponentBase, IAsyncDisposable
         foreach (var routeShapeFeature in res.Value)
         {
             var key = routeShapeFeature.Properties.RouteShortName ?? routeShapeFeature.Properties.RouteId;
-            _routeShapeCache[key] = routeShapeFeature;
+            if (IsAllowedRoute(key))
+                _routeShapeCache[key] = routeShapeFeature;
         }
     }
+
+    // Returns true for routes that should render and produce audio.
+    // Restrict to a subset for focused testing; return true unconditionally for all routes.
+    static bool IsAllowedRoute(string routeKey) => true;
 
     public record CrossingEventDto(string VehicleId, string RouteId, int TriggerIndex);
 }
