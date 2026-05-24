@@ -12,8 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\ChefKnifeStudios.MartaJazz.ServiceDefaults\ChefKnifeStudios.MartaJazz.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\ChefKnifeStudios.MartaJazz.Shared\ChefKnifeStudios.MartaJazz.Shared.csproj" />
-    <ProjectReference Include="..\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker.csproj">
-      <ExcludeAssets>contentfiles</ExcludeAssets>
-    </ProjectReference>
+    <ProjectReference Include="..\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker\ChefKnifeStudios.MartaJazz.Server.TransitDataWorker.csproj" />
   </ItemGroup>
 </Project>
