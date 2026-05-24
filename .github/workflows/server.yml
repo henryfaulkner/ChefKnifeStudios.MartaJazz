@@ -7,8 +7,8 @@ on:
 env:
   REGISTRY: chefknife.azurecr.io
   IMAGE_NAME: chefknifestudios.martajazz.server.webapi
-  CONTAINER_APP_NAME: marta-jazz-prod-ca-server
-  RESOURCE_GROUP: marta-jazz-prod-rg
+  CONTAINER_APP_NAME: marta-jazz-dev-ca-server
+  RESOURCE_GROUP: marta-jazz-dev-rg
 
 jobs:
   build-and-push:
@@ -44,7 +44,6 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - name: Azure login
         uses: azure/login@v2

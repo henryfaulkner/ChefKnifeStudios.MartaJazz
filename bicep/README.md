@@ -57,6 +57,27 @@ Search the codebase for `TODO:` — those are the holes. Quick inventory:
 **`dnsZone.bicep`**
 - `www` CNAME currently points to `{swa-name}.azurestaticapps.net`. Azure sometimes assigns region-suffixed default hostnames — verify after first SWA deploy and update if needed.
 
+## GitHub Actions secrets
+
+The CI/CD workflows require four secrets set in GitHub → Settings → Secrets and variables → Actions:
+
+| Secret | How to obtain |
+|---|---|
+| `AZURE_STATIC_WEB_APP_TOKEN` | Azure Portal → Static Web App → Manage deployment token |
+| `ACR_USERNAME` | Azure Portal → Container Registry `chefknife` → Access keys → Username |
+| `ACR_PASSWORD` | Azure Portal → Container Registry `chefknife` → Access keys → Password |
+| `AZURE_CREDENTIALS` | See below |
+
+Generate `AZURE_CREDENTIALS` (service principal scoped to the prod resource group):
+
+```bash
+az ad sp create-for-rbac --name "github-actions-transitjazz" --role Contributor --scopes /subscriptions/<subscription-id>/resourceGroups/marta-jazz-prod-rg --sdk-auth
+```
+
+Paste the full JSON output as the `AZURE_CREDENTIALS` secret value.
+
+Also create a `production` GitHub Environment in repository Settings → Environments — the deploy jobs gate on it.
+
 ## Deploy
 
 ```bash
