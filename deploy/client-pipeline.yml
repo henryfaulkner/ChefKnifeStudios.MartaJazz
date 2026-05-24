@@ -1,3 +1,6 @@
+# SUPERSEDED: This Azure DevOps pipeline has been replaced by .github/workflows/client.yml (GitHub Actions).
+# Retained for reference only. Do not run.
+
 name: $(SourceBranchName)-chefknifestudios-transitjazz-client-$(Date:yyyyMMdd).$(Rev:r)
 
 trigger:
