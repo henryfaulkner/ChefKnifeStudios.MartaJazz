@@ -38,8 +38,8 @@ Vehicle state (nearest point, timestamp, route, speed, bearing) MUST be tracked 
 ### IV. OpenTelemetry Observability
 All .NET components MUST use structured logging to ensure correlation between background polling events, spatial reconciliation cycles, and SignalR broadcasts. OpenTelemetry integration with Azure Log Analytics Workspace is the target observability backend.
 
-### V. Azure DevOps CI/CD Pipeline
-Source control MUST be managed in GitHub. CI/CD pipelines MUST be managed via Azure DevOps. The build pipeline MUST produce two distinct artifacts: a compiled WASM artifact deployed to Azure Static Web Apps, and a Background Service Docker Image pushed to the Azure Container Registry (ACR).
+### V. GitHub Actions CI/CD Pipeline
+Source control MUST be managed in GitHub. CI/CD pipelines MUST be managed via GitHub Actions. The build pipeline MUST produce two distinct artifacts: a compiled WASM artifact deployed to Azure Static Web Apps, and a Background Service Docker Image pushed to the Azure Container Registry (ACR).
 
 ### VI. GTFS ID Mapping
 MARTA's GTFS static feed uses internal numeric IDs as `route_id` (e.g., `"26932"`), while the GTFS-RT feed's `Trip.RouteId` uses public-facing route short names (e.g., `"74"`, `"118"`). All systems that correlate static and real-time data MUST use `route_short_name` from `routes.txt` as the join key, falling back to `route_id` only when `route_short_name` is absent. The `RouteShapeProperties.RouteShortName` field carries this value through the shapes API.
@@ -201,4 +201,4 @@ Stored in `IKeyValueRepository<string>` keyed by `route_id` from GTFS static:
 - No unauthorized technology substitutions without constitution amendment
 - Azure services MUST be used as specified (Static Web Apps, Container Apps, Functions, Log Analytics, ACR)
 
-**Version**: 2.1.0 | **Ratified**: 2026-05-03 | **Last Amended**: 2026-05-14
+**Version**: 3.1.0 | **Ratified**: 2026-05-03 | **Last Amended**: 2026-05-23
