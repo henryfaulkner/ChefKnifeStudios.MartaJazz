@@ -2,7 +2,7 @@ name: Server CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, features/010-github-actions-cicd]
 
 env:
   REGISTRY: chefknife.azurecr.io
