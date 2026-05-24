@@ -41,6 +41,9 @@ param repositoryUrl string = 'https://github.com/henryfaulkner/ChefKnifeStudios.
 @secure()
 param repositoryToken string
 
+@description('Bind custom domains to the SWA. Set false on first deploy (DNS zone must exist first); set true on subsequent deploys.')
+param bindCustomDomains bool = false
+
 // -----------------------------------------------------------------------------
 // Variables
 // -----------------------------------------------------------------------------
@@ -52,6 +55,9 @@ var tags = {
   env: environment
   project: projectName
 }
+
+var staticWebAppName = '${namePrefix}-swa'
+var staticWebAppResourceId = '/subscriptions/${subscription().subscriptionId}/resourceGroups/${resourceGroupName}/providers/Microsoft.Web/staticSites/${staticWebAppName}'
 
 // -----------------------------------------------------------------------------
 // Resource Group
@@ -73,9 +79,6 @@ module dnsZone 'modules/dnsZone.bicep' = {
   params: {
     zoneName: apexDomain
     tags: tags
-    staticWebAppName: swa.outputs.name
-    staticWebAppResourceId: swa.outputs.id
-    staticWebAppDefaultHostname: swa.outputs.defaultHostname
   }
 }
 
@@ -87,17 +90,46 @@ module swa 'modules/staticWebApp.bicep' = {
   name: 'swa-deploy'
   scope: rg
   params: {
-    name: '${namePrefix}-swa'
+    name: staticWebAppName
     location: 'eastus2'
     tags: tags
     repositoryUrl: repositoryUrl
     repositoryToken: repositoryToken
     branch: 'main'
-    customDomains: [
+    customDomains: bindCustomDomains ? [
       apexDomain
       'www.${apexDomain}'
-    ]
+    ] : []
   }
+}
+
+// -----------------------------------------------------------------------------
+// DNS records (depend on both DNS zone and SWA; run after both complete)
+// -----------------------------------------------------------------------------
+
+module apexA 'modules/dnsApexA.bicep' = {
+  name: 'dns-apex-a-deploy'
+  scope: rg
+  params: {
+    zoneName: apexDomain
+    staticWebAppResourceId: staticWebAppResourceId
+  }
+  dependsOn: [
+    dnsZone
+    swa
+  ]
+}
+
+module wwwCname 'modules/dnsWwwCname.bicep' = {
+  name: 'dns-www-cname-deploy'
+  scope: rg
+  params: {
+    zoneName: apexDomain
+    swaDefaultHostname: swa.outputs.defaultHostname
+  }
+  dependsOn: [
+    dnsZone
+  ]
 }
 
 // -----------------------------------------------------------------------------
@@ -155,8 +187,8 @@ module serverApp 'modules/containerApp.bicep' = {
     environmentId: cae.outputs.id
     managedIdentityId: serverIdentity.outputs.id
     containerRegistryLoginServer: '${containerRegistryName}.azurecr.io'
-    image: '${containerRegistryName}.azurecr.io/chefknifestudios.martajazz.server.webapi:${serverImageTag}'
-    cpu: json('0.5')
+    image: '${containerRegistryName}.azurecr.io/chefknifestudios.pokerattack.server.webapi:main-chefknifestudios-pokerattack-server-20260125.1'
+    cpu: '0.5'
     memory: '1Gi'
     minReplicas: 1
     maxReplicas: 1

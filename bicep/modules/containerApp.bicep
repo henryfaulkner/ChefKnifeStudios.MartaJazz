@@ -24,8 +24,8 @@ param containerRegistryLoginServer string
 @description('Full image reference including tag.')
 param image string
 
-@description('CPU cores (e.g., 0.5). Pass as json("0.5") from caller.')
-param cpu int
+@description('CPU cores (e.g., 0.5).')
+param cpu string
 
 @description('Memory (e.g., 1Gi).')
 param memory string = '1Gi'
@@ -96,7 +96,7 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
           name: 'server'
           image: image
           resources: {
-            cpu: cpu
+            cpu: json(cpu)
             memory: memory
           }
           env: envVars
