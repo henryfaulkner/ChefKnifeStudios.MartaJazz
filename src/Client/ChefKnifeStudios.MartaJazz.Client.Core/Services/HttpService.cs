@@ -115,9 +115,23 @@ public class HttpService : IHttpService
     {
         if (response.IsSuccessStatusCode)
         {
-            var content = await response.Content.ReadFromJsonAsync<T>(_options, ct);
-            return Result<T>.Success(content!);
+            try
+            {
+                var raw = await response.Content.ReadAsStringAsync(ct);
+                Console.WriteLine($"[HttpService] {response.RequestMessage?.Method} {response.RequestMessage?.RequestUri} → {(int)response.StatusCode} body_len={raw.Length}");
+
+                var content = JsonSerializer.Deserialize<T>(raw, _options);
+                return Result<T>.Success(content!);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HttpService] Deserialization failed for {typeof(T).Name}: {ex.Message}");
+                return Result<T>.Error($"Deserialization failed: {ex.Message}");
+            }
         }
+
+        var errorBody = await response.Content.ReadAsStringAsync(ct);
+        Console.WriteLine($"[HttpService] {response.RequestMessage?.Method} {response.RequestMessage?.RequestUri} → {(int)response.StatusCode} body={errorBody}");
 
         return response.StatusCode switch
         {
