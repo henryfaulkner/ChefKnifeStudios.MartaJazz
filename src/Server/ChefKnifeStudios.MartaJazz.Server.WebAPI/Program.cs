@@ -81,7 +81,6 @@ builder.Services.AddSingleton<IFeatureFlagService>(sp =>
     return new FeatureFlagService(flags);
 });
 
-builder.Services.AddSingleton<TokenProvider>();
 builder.Services.AddSingleton<ITransitHubPublisher, SignalRHubPublisher>();
 builder.Services.AddHttpClient("RouteShapeApi", client =>
 {
