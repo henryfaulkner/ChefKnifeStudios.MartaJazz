@@ -35,19 +35,6 @@ builder.Services.AddCors(options =>
     });
 });
 
-//builder.Services
-//    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-//    .AddMicrosoftIdentityWebApi(builder.Configuration.GetSection("AzureAd"));
-
-//builder.Services.AddAuthorization(options =>
-//{
-//    options.AddPolicy("TransitDataPublisher", policy =>
-//    {
-//        policy.RequireAuthenticatedUser();
-//        policy.RequireClaim("roles", "TransitData.Publish");
-//    });
-//});
-
 builder.Services.AddSignalR(options =>
     {
         options.EnableDetailedErrors = true;
