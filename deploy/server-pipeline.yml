@@ -1,3 +1,6 @@
+# SUPERSEDED: This Azure DevOps pipeline has been replaced by .github/workflows/server.yml (GitHub Actions).
+# Retained for reference only. Do not run.
+
 name: $(SourceBranchName)-chefknifestudios-transitjazz-server-$(Date:yyyyMMdd).$(Rev:r)
 
 trigger:
@@ -9,7 +12,7 @@ pool:
 variables:
   azure-subscription-service-connection: TransitJazzSC
   container-registry: chefknife.azurecr.io
-  api-container-name: ChefKnifeStudios.MartaJazz.server.webapi
+  api-container-name: chefknifestudios.martajazz.server.webapi
 
 stages:
   - stage: BuildAndPublish
@@ -24,7 +27,7 @@ stages:
               docker compose build
             displayName: 'Build Docker images'
           - script: |
-              docker tag ChefKnifeStudios.MartaJazz.server.webapi:latest $(container-registry)/$(api-container-name):latest
+              docker tag chefknifestudios.martajazz.server.webapi:latest $(container-registry)/$(api-container-name):latest
               docker push $(container-registry)/$(api-container-name):latest
             displayName: 'Push API image'
 

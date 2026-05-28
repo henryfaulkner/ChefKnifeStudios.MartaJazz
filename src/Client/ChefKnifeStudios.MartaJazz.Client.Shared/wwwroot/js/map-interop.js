@@ -58,7 +58,10 @@ window.ChefMap = {
 
             let containerDiv = document.getElementById(containerDivId);
             if (containerDiv) {
+                console.debug('[ChefMap] map load complete, notifying Blazor (notifyMapReadyAsync) for ' + containerDivId);
                 dotNetRef.invokeMethodAsync('notifyMapReadyAsync');
+            } else {
+                console.warn('[ChefMap] map load complete but container div not found: ' + containerDivId);
             }
         });
     },
@@ -209,11 +212,24 @@ window.ChefMap = {
 
     addRouteShapeFeature: function (containerDivId, routeId, coordinates, color) {
         let map = ChefMap.maps[containerDivId];
-        if (!map) return;
+        if (!map) {
+            console.warn('[ChefMap] addRouteShapeFeature: no map for containerDivId=' + containerDivId);
+            return;
+        }
 
         let sourceId = 'route-' + routeId;
         let layerId = 'route-layer-' + routeId;
         let lineColor = color || '#0078D4';
+
+        console.debug('[ChefMap] addRouteShapeFeature: routeId=' + routeId
+            + ' coords=' + (coordinates ? coordinates.length : 'null')
+            + ' color=' + lineColor
+            + ' sourceExists=' + !!map.getSource(sourceId));
+
+        if (!coordinates || coordinates.length === 0) {
+            console.warn('[ChefMap] addRouteShapeFeature: skipping routeId=' + routeId + ' — coordinates null/empty');
+            return;
+        }
 
         let geojson = {
             type: 'Feature',
@@ -223,8 +239,10 @@ window.ChefMap = {
 
         let source = map.getSource(sourceId);
         if (source) {
+            console.debug('[ChefMap] addRouteShapeFeature: updating existing source for routeId=' + routeId);
             source.setData(geojson);
         } else {
+            console.debug('[ChefMap] addRouteShapeFeature: adding new source+layer for routeId=' + routeId);
             map.addSource(sourceId, { type: 'geojson', data: geojson });
             map.addLayer({
                 id: layerId,
@@ -233,6 +251,7 @@ window.ChefMap = {
                 layout: { 'line-join': 'round', 'line-cap': 'round' },
                 paint: { 'line-color': lineColor, 'line-width': 4, 'line-opacity': 0.85 }
             }, 'vehicles-layer');
+            console.debug('[ChefMap] addRouteShapeFeature: layer added for routeId=' + routeId);
         }
     }
 };

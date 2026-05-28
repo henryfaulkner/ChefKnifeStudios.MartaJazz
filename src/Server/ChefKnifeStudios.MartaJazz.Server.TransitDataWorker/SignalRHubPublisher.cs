@@ -11,7 +11,6 @@ public sealed class SignalRHubPublisher : ITransitHubPublisher, IAsyncDisposable
     private readonly ILogger<SignalRHubPublisher> _logger;
 
     public SignalRHubPublisher(
-        TokenProvider tokenProvider,
         IConfiguration configuration,
         ILogger<SignalRHubPublisher> logger)
     {

@@ -41,6 +41,8 @@ public partial class TransitMap : ComponentBase, IAsyncDisposable
 
     // routeId → GeoJSON string (client-side cache, lives for page lifetime)
     readonly Dictionary<string, RouteShapeFeature> _routeShapeCache = new(StringComparer.Ordinal);
+    bool _routesLoaded;
+    bool _routesRendered;
 
     static CameraOptions DefaultCameraOptions
         => new() { Center = new Position(33.749, -84.388), Zoom = 10 };
@@ -63,6 +65,15 @@ public partial class TransitMap : ComponentBase, IAsyncDisposable
             Logger.LogError(ex, "TransitMap: Failed to connect to SignalR hub");
             _connectionLabel = "Disconnected";
             _connectionCssClass = "disconnected";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_mapReady && _routesLoaded && !_routesRendered && _map is not null)
+        {
+            _routesRendered = true;
+            await RenderRoutesAsync();
         }
     }
 
@@ -101,15 +112,7 @@ public partial class TransitMap : ComponentBase, IAsyncDisposable
     {
         _map = map;
         _mapReady = true;
-
-        Logger.LogDebug("TransitMap: pushing {Count} route geometries to animator and map layer", _routeShapeCache.Count);
-        foreach (var (routeId, feature) in _routeShapeCache)
-        {
-            await _map.AddRouteShapeFeatureAsync(routeId, feature.Geometry.Coordinates, feature.Properties.Color);
-            await _map.LoadRouteGeometryForAnimationAsync(routeId, feature.Geometry.Coordinates);
-            await ConfigureTrackerForRouteAsync(routeId, feature);
-        }
-        Logger.LogDebug("TransitMap: route geometry push complete");
+        await InvokeAsync(StateHasChanged);
 
         if (_pendingBatch is not null)
         {
@@ -117,6 +120,33 @@ public partial class TransitMap : ComponentBase, IAsyncDisposable
             _pendingBatch = null;
             await HandleVehicleBatchAsync(batch);
         }
+    }
+
+    async Task RenderRoutesAsync()
+    {
+        Logger.LogDebug("TransitMap.RenderRoutesAsync: pushing {Count} cached routes to map", _routeShapeCache.Count);
+
+        if (_routeShapeCache.Count == 0)
+            Logger.LogWarning("TransitMap.RenderRoutesAsync: route cache is empty — routes will not render");
+
+        foreach (var (routeId, feature) in _routeShapeCache)
+        {
+            var coordCount = feature.Geometry?.Coordinates?.Length ?? -1;
+            Logger.LogDebug("TransitMap.RenderRoutesAsync: rendering routeId={RouteId} CoordCount={CoordCount} Color={Color}",
+                routeId, coordCount, feature.Properties?.Color);
+
+            if (feature.Geometry?.Coordinates is null || feature.Geometry.Coordinates.Length == 0)
+            {
+                Logger.LogWarning("TransitMap.RenderRoutesAsync: skipping routeId={RouteId} — Geometry.Coordinates is null or empty", routeId);
+                continue;
+            }
+
+            await _map!.AddRouteShapeFeatureAsync(routeId, feature.Geometry.Coordinates, feature.Properties.Color);
+            await _map!.LoadRouteGeometryForAnimationAsync(routeId, feature.Geometry.Coordinates);
+            await ConfigureTrackerForRouteAsync(routeId, feature);
+        }
+
+        Logger.LogDebug("TransitMap.RenderRoutesAsync: route geometry push complete");
     }
 
     async Task ConfigureTrackerForRouteAsync(string routeId, RouteShapeFeature feature)
@@ -266,20 +296,43 @@ public partial class TransitMap : ComponentBase, IAsyncDisposable
 
     async Task LoadRoutesAsync(CancellationToken ct = default)
     {
+        Logger.LogDebug("TransitMap.LoadRoutesAsync: fetching all route shapes");
         var res = await GtfsEndpointsService.GetAllRouteShapes(ct);
         if (!res.IsSuccess)
         {
-            Logger.LogError("Unable to pull route data.");
+            Logger.LogError("TransitMap.LoadRoutesAsync: GetAllRouteShapes failed — Status={Status} Errors={Errors}",
+                res.Status, string.Join("; ", res.Errors));
             return;
         }
 
+        var allFeatures = res.Value?.ToList() ?? [];
+        Logger.LogDebug("TransitMap.LoadRoutesAsync: received {Total} features from API", allFeatures.Count);
+
         _routeShapeCache.Clear();
-        foreach (var routeShapeFeature in res.Value)
+        var skipped = 0;
+        foreach (var routeShapeFeature in allFeatures)
         {
-            var key = routeShapeFeature.Properties.RouteShortName ?? routeShapeFeature.Properties.RouteId;
+            var key = routeShapeFeature.Properties?.RouteShortName ?? routeShapeFeature.Properties?.RouteId ?? "(null)";
             if (IsAllowedRoute(key))
+            {
                 _routeShapeCache[key] = routeShapeFeature;
+                Logger.LogDebug("TransitMap.LoadRoutesAsync: cached key={Key} RouteId={RouteId} CoordCount={CoordCount} Geometry={GeomNull}",
+                    key,
+                    routeShapeFeature.Properties?.RouteId,
+                    routeShapeFeature.Geometry?.Coordinates?.Length ?? -1,
+                    routeShapeFeature.Geometry is null ? "NULL" : "ok");
+            }
+            else
+            {
+                skipped++;
+            }
         }
+
+        Logger.LogDebug("TransitMap.LoadRoutesAsync: cache populated — {Cached} cached, {Skipped} skipped by IsAllowedRoute",
+            _routeShapeCache.Count, skipped);
+
+        _routesLoaded = true;
+        await InvokeAsync(StateHasChanged);
     }
 
     // Returns true for routes that should render and produce audio.

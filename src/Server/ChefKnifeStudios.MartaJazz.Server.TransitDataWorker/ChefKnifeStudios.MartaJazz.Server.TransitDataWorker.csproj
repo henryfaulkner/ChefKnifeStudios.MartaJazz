@@ -19,4 +19,10 @@
     <ProjectReference Include="..\..\ChefKnifeStudios.MartaJazz.ServiceDefaults\ChefKnifeStudios.MartaJazz.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\ChefKnifeStudios.MartaJazz.Shared\ChefKnifeStudios.MartaJazz.Shared.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings*.json">
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

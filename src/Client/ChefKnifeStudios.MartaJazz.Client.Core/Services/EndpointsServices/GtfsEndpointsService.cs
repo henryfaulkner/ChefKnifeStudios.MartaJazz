@@ -44,7 +44,33 @@ public class GtfsEndpointsService : IGtfsEndpointsService
     {
         try
         {
+            _logger.LogDebug("GtfsEndpointsService.GetAllRouteShapes: requesting {Url}", ApiEndpoints.Gtfs.GetAllRouteShapes);
             var result = await _httpService.GetAsync<IEnumerable<RouteShapeFeature>>(ApiEndpoints.Gtfs.GetAllRouteShapes, cancellationToken);
+
+            if (result.IsSuccess)
+            {
+                var list = result.Value?.ToList();
+                _logger.LogDebug("GtfsEndpointsService.GetAllRouteShapes: deserialized {Count} features", list?.Count ?? 0);
+                if (list is not null)
+                {
+                    foreach (var f in list)
+                    {
+                        _logger.LogDebug(
+                            "  route: RouteId={RouteId} ShortName={ShortName} CoordCount={CoordCount} Color={Color} GeomType={GeomType}",
+                            f.Properties?.RouteId,
+                            f.Properties?.RouteShortName,
+                            f.Geometry?.Coordinates?.Length ?? -1,
+                            f.Properties?.Color,
+                            f.Geometry?.Type);
+                    }
+                }
+            }
+            else
+            {
+                _logger.LogWarning("GtfsEndpointsService.GetAllRouteShapes: non-success result — Status={Status} Errors={Errors}",
+                    result.Status, string.Join("; ", result.Errors));
+            }
+
             return result;
         }
         catch (Exception ex)
